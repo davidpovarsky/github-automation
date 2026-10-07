@@ -1,0 +1,16 @@
+name = "github-live-activity"
+main = "worker/src/index.js"
+compatibility_date = "2026-10-07"
+workers_dev = true
+
+[vars]
+# Secrets are configured with `wrangler secret put`; never commit their values.
+
+[durable_objects]
+bindings = [
+  { name = "RUN_STATE", class_name = "RunState" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RunState"]
