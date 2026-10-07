@@ -149,3 +149,35 @@ Both `NOTIFY_DEVICE_ID` and `NOTIFY_DEVICE_TOKEN` were distributed via the authe
 - **Cloudflare Path**:
   - `.github/workflows/deploy-live-activity-worker.yml` retired and deprecated.
   - Cloudflare Worker is NOT deployed and NOT required.
+
+---
+
+## 6. Architecture Hardening & Cooldown Remediation
+
+### 6.1 Root Cause of Notify HTTP 429
+During the initial account-wide rollout, hundreds of CI workflow runs across 297 branches were initiated. Under the original implementation:
+1. `requested` triggers fired when runs were queued before runners were assigned, attempting premature Live Activity starts.
+2. In-job `refresh` steps were allowed to create a Live Activity if no matching active activity was found. When Apple APNs was delayed or the device did not immediately report rendered tiles, subsequent step refreshes repeatedly attempted new starts.
+3. Once 5 unanswered push-to-start requests were received by Apple APNs without tile confirmations from the device, Notify's safety circuit tripped, returning `HTTP 429: Too Many Requests` (`unansweredStarts: 5`, `retryAfterSeconds: ~6780`).
+
+### 6.2 Architectural Hardening Fixes
+1. **Removed `requested` Trigger Account-Wide**:
+   - Bridge lifecycle reduced strictly to `in_progress` (maps to `start`) and `completed` (maps to `final`).
+   - All 92 default-branch bridge workflows (`live-activity-bridge.yml`) updated with `[skip ci]`, avoiding another Actions storm (queue: 0).
+2. **Strict Event Semantics**:
+   - `event: refresh` **NEVER** creates a Live Activity. If 0 matching activities exist, it returns `no_existing_activity` and performs zero start calls.
+   - `event: start` only creates ONE activity if ZERO matching non-terminal activities exist.
+   - `event: final` ends matching activities and never creates.
+3. **Recognizing `starting` as Existing/Non-Terminal**:
+   - `starting` and `active` are recognized as existing, non-terminal states.
+   - If a matching activity is in state `starting`, both `start` and `refresh` treat it as in-flight (`existing_starting_activity`) and issue zero new starts.
+4. **`new=1` Policy**:
+   - When device has 0 existing activities, start uses standard start/upsert without `new=1`.
+   - `new=1` is used only when an unrelated concurrent activity is already active on the device.
+   - Refresh never uses `new=1`.
+5. **HTTP 429 Throttling Handled as First-Class State**:
+   - Parses `retryAfterSeconds`, `unansweredStarts`, `openingTheAppMayHelp`.
+   - Logs concise warning, returns `notify_start_throttled`, and fails open (build continues).
+6. **Zero Real Start Calls During Cooldown**:
+   - Verification conducted via 81 passing unit/behavioral regression tests and mock suites.
+   - Zero Live Activity POST start calls issued during device cooldown.

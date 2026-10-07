@@ -45,6 +45,17 @@
     "workflowsModified": 1208,
     "prsCreated": 1
   },
+  "hardening": {
+    "rootCause": "Repeated start attempts during non-visible/starting state and queued requested events tripped Notify 5-unanswered-starts safety circuit",
+    "requestedTriggerRemoved": true,
+    "bridgesUpdatedCount": 92,
+    "refreshChangedToUpdateOnly": true,
+    "startingStateRecognized": true,
+    "handling429Added": true,
+    "newPolicyImplemented": "start uses new=1 only when another concurrent activity exists; refresh never uses new=1",
+    "testsPassingCount": 81,
+    "realStartRequestsDuringCooldown": 0
+  },
   "repositories": [
     {
       "repository": "davidpovarsky/hanlin-ai",
