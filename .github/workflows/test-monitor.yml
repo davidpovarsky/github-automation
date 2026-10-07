@@ -1,0 +1,46 @@
+name: Test Central Monitor
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/monitor.yml"
+      - ".github/workflows/test-monitor.yml"
+      - "scripts/monitor-run.js"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  live-activity:
+    uses: ./.github/workflows/monitor.yml
+    with:
+      title: "Monitor Test"
+      poll_seconds: 5
+      keep_for: 30
+      max_minutes: 20
+    secrets:
+      notify_device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+      notify_device_token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+
+  build:
+    name: Build demo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare
+        run: sleep 6
+      - name: Compile
+        run: sleep 6
+      - name: Tests
+        run: sleep 6
+
+  package:
+    name: Package demo
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Archive
+        run: sleep 6
+      - name: Upload artifact simulation
+        run: sleep 6
