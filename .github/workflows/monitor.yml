@@ -33,11 +33,36 @@ on:
         required: false
         type: number
         default: 360
+      source_run_id:
+        description: Workflow run ID to monitor. Zero means the current run.
+        required: false
+        type: number
+        default: 0
+      source_repository:
+        description: owner/repo containing the workflow run. Defaults to the caller repo.
+        required: false
+        type: string
+        default: ""
+      source_branch:
+        description: Branch of the source workflow run.
+        required: false
+        type: string
+        default: ""
+      source_workflow:
+        description: Name of the source workflow.
+        required: false
+        type: string
+        default: ""
+      source_run_number:
+        description: Human-readable source workflow run number.
+        required: false
+        type: number
+        default: 0
     secrets:
       notify_device_id:
-        required: true
+        required: false
       notify_device_token:
-        required: true
+        required: false
 
 permissions:
   actions: read
@@ -65,17 +90,19 @@ jobs:
           action: start
           device_id: ${{ secrets.notify_device_id }}
           token: ${{ secrets.notify_device_token }}
+          scope_repository: ${{ inputs.source_repository || github.repository }}
+          scope_branch: ${{ inputs.source_branch || github.ref_name }}
           title: ${{ inputs.title || github.event.repository.name }}
-          body: "Workflow #${{ github.run_number }}"
+          body: "${{ inputs.source_workflow || github.workflow }} #${{ inputs.source_run_number || github.run_number }}"
           symbol: ${{ inputs.symbol }}
           tint: ${{ inputs.tint }}
           progress: "0"
           status: "Starting"
           metrics_json: |
             [
-              {"label":"Branch","value":"${{ github.ref_name }}"},
-              {"label":"Workflow","value":"${{ github.workflow }}"},
-              {"label":"Run","value":"#${{ github.run_number }}"}
+              {"label":"Branch","value":"${{ inputs.source_branch || github.ref_name }}"},
+              {"label":"Workflow","value":"${{ inputs.source_workflow || github.workflow }}"},
+              {"label":"Run","value":"#${{ inputs.source_run_number || github.run_number }}"}
             ]
 
       - name: Follow workflow jobs
@@ -87,6 +114,11 @@ jobs:
           NOTIFY_DEVICE_TOKEN: ${{ secrets.notify_device_token }}
           NOTIFY_ACTIVITY_ID: ${{ steps.notify.outputs.activity_id }}
           POLL_SECONDS: ${{ inputs.poll_seconds }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          SOURCE_WORKFLOW: ${{ inputs.source_workflow }}
+          SOURCE_RUN_NUMBER: ${{ inputs.source_run_number }}
         run: node .github-automation/scripts/monitor-run.js
 
       - name: End Live Activity
@@ -97,6 +129,8 @@ jobs:
           device_id: ${{ secrets.notify_device_id }}
           token: ${{ secrets.notify_device_token }}
           activity_id: ${{ steps.notify.outputs.activity_id }}
+          scope_repository: ${{ inputs.source_repository || github.repository }}
+          scope_branch: ${{ inputs.source_branch || github.ref_name }}
           progress: "100"
           status: ${{ steps.follow.outputs.final_status || 'Finished' }}
           keep_for: ${{ inputs.keep_for }}
