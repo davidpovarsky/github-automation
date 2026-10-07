@@ -1,0 +1,76 @@
+name: Test Notify Live Activity
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-notify:
+    name: Send test Live Activity
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Live Activity
+        id: notify
+        uses: ./
+        with:
+          action: start
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          title: "GitHub Automation Test"
+          body: "Testing central Notify integration"
+          symbol: "hammer.fill"
+          tint: "#0A84FF"
+          steps: "3"
+          step: "0"
+          status: "Starting"
+          metrics_json: |
+            [
+              {"label":"Repository","value":"github-automation"},
+              {"label":"Stage","value":"Start"},
+              {"label":"Run","value":"#${{ github.run_number }}"}
+            ]
+          fail_on_error: "true"
+
+      - name: Wait before update
+        run: sleep 8
+
+      - name: Update Live Activity
+        uses: ./
+        with:
+          action: update
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          activity_id: ${{ steps.notify.outputs.activity_id }}
+          steps: "3"
+          step: "1"
+          status: "Running"
+          metrics_json: |
+            [
+              {"label":"Repository","value":"github-automation"},
+              {"label":"Stage","value":"Update"},
+              {"label":"Run","value":"#${{ github.run_number }}"}
+            ]
+          fail_on_error: "true"
+
+      - name: Wait before finish
+        run: sleep 8
+
+      - name: End Live Activity
+        if: always() && steps.notify.outputs.activity_id != ''
+        uses: ./
+        with:
+          action: end
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          activity_id: ${{ steps.notify.outputs.activity_id }}
+          steps: "3"
+          step: "3"
+          progress: "100"
+          status: "Success"
+          keep_for: "30"
+          fail_on_error: "true"
