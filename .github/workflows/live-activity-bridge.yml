@@ -3,8 +3,13 @@ name: Live Activity Bridge
 on:
   workflow_run:
     workflows:
-      - "*"
-      - "!Live Activity Bridge"
+      - "Central Live Activity Monitor"
+      - "Validate event-driven Live Activity implementation"
+      - "Test Central Monitor"
+      - "Test Notify Live Activity"
+      - "Test Workflow-Run Watcher"
+      - "Validate action"
+      - "Watcher Source Test"
     types:
       - requested
       - in_progress
@@ -21,7 +26,7 @@ concurrency:
 jobs:
   bridge:
     name: Bridge
-    if: ${{ github.event.workflow_run.name != 'Live Activity Bridge' && !startsWith(github.event.workflow_run.name, 'Live Activity') }}
+    if: ${{ github.event.workflow_run.name != 'Live Activity Bridge' && !startsWith(github.event.workflow_run.name, 'Live Activity Bridge') }}
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
