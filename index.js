@@ -5,31 +5,50 @@ const path = require('path');
 
 const BASE_URL = 'https://push.getnotifyapp.com';
 
-function loadControlConfig() {
-  const configPath = path.join(__dirname, 'config.json');
+function normalizeControlConfig(parsed) {
+  return {
+    enabled: parsed?.enabled !== false,
+    repositories: parsed?.repositories && typeof parsed.repositories === 'object'
+      ? parsed.repositories
+      : { '*': true },
+    branches: parsed?.branches && typeof parsed.branches === 'object'
+      ? parsed.branches
+      : {},
+    endExistingWhenDisabled: parsed?.endExistingWhenDisabled !== false,
+  };
+}
 
+async function loadControlConfig() {
+  const remoteUrl = 'https://raw.githubusercontent.com/davidpovarsky/github-automation/main/config.json';
+
+  // Fetch the current central switch on every invocation. This means changing
+  // config.json on main affects the next Notify step even in an already-running
+  // workflow, instead of waiting for a fresh workflow run to download the action.
   try {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    const parsed = JSON.parse(raw);
+    const response = await fetch(remoteUrl, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'davidpovarsky/github-automation-control',
+        'Cache-Control': 'no-cache',
+      },
+      signal: AbortSignal.timeout(5000),
+    });
 
-    return {
-      enabled: parsed.enabled !== false,
-      repositories: parsed.repositories && typeof parsed.repositories === 'object'
-        ? parsed.repositories
-        : { '*': true },
-      branches: parsed.branches && typeof parsed.branches === 'object'
-        ? parsed.branches
-        : {},
-      endExistingWhenDisabled: parsed.endExistingWhenDisabled !== false,
-    };
+    if (response.ok) {
+      return normalizeControlConfig(await response.json());
+    }
+
+    warning(`Central config fetch returned HTTP ${response.status}; using bundled config.json.`);
   } catch (error) {
-    warning(`Unable to read central config.json; defaulting Live Activities to enabled: ${error.message}`);
-    return {
-      enabled: true,
-      repositories: { '*': true },
-      branches: {},
-      endExistingWhenDisabled: true,
-    };
+    warning(`Unable to fetch live central config; using bundled config.json: ${error.message}`);
+  }
+
+  const configPath = path.join(__dirname, 'config.json');
+  try {
+    return normalizeControlConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
+  } catch (error) {
+    warning(`Unable to read bundled config.json; defaulting Live Activities to enabled: ${error.message}`);
+    return normalizeControlConfig({});
   }
 }
 
@@ -200,7 +219,7 @@ async function main() {
     throw new Error(`Input "action" must be start, update, or end; got "${action || '(empty)'}".`);
   }
 
-  const controlConfig = loadControlConfig();
+  const controlConfig = await loadControlConfig();
   const callerRepository = process.env.GITHUB_REPOSITORY || '';
   const callerBranch = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || '';
   const scopeEnabled = resolveScopeEnabled(controlConfig, callerRepository, callerBranch);
