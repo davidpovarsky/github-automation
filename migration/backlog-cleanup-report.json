@@ -1,0 +1,321 @@
+{
+  "timestamp": "2026-10-07T23:22:12.858Z",
+  "queuedBefore": 27,
+  "inProgressBefore": 12,
+  "totalCancelled": 35,
+  "genuinePreserved": 4,
+  "queuedAfter": 3,
+  "inProgressAfter": 7,
+  "cancelledRuns": [
+    {
+      "repo": "davidpovarsky/ayna",
+      "runId": 37697824646,
+      "status": "in_progress",
+      "name": "Build Unsigned iOS IPA",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/cecilias-notes",
+      "runId": 37697707085,
+      "status": "queued",
+      "name": "Build",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/Maktabah",
+      "runId": 37701655903,
+      "status": "in_progress",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/Maktabah",
+      "runId": 37701656013,
+      "status": "in_progress",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/Maktabah",
+      "runId": 37701656177,
+      "status": "in_progress",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/Settings-iOS",
+      "runId": 37697684307,
+      "status": "queued",
+      "name": "Build Signed Settings-iOS IPA and Upload to TestFlight",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/Shortcut-launcher",
+      "runId": 37696234053,
+      "status": "in_progress",
+      "name": "iOS 27 CI",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/social-app",
+      "runId": 37697435326,
+      "status": "queued",
+      "name": "Torah Social — Runtime Repair CI",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701705918,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/SideStore",
+      "runId": 37696152844,
+      "status": "queued",
+      "name": "Custom ExtensionKit SideStore Build",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/Shortcut-launcher",
+      "runId": 37696233090,
+      "status": "in_progress",
+      "name": "iOS 27 CI",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701705189,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/SideStore",
+      "runId": 37696153702,
+      "status": "queued",
+      "name": "Custom ExtensionKit SideStore Build",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701704409,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/SideStore",
+      "runId": 37696149272,
+      "status": "queued",
+      "name": "Custom ExtensionKit SideStore Build",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701702233,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/SideStore",
+      "runId": 37696147346,
+      "status": "queued",
+      "name": "Custom ExtensionKit SideStore Build",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/SideStore",
+      "runId": 37696145408,
+      "status": "queued",
+      "name": "Custom ExtensionKit SideStore Build",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701701345,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701699621,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/SideStore",
+      "runId": 37696141840,
+      "status": "queued",
+      "name": "Custom ExtensionKit SideStore Build",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701700253,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/SideStore",
+      "runId": 37696136626,
+      "status": "queued",
+      "name": "Custom ExtensionKit SideStore Build",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701698929,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701697007,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701696941,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701697303,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701695781,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701693046,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701686873,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": false
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701681608,
+      "status": "queued",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": true
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701702665,
+      "status": "in_progress",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": false
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701703108,
+      "status": "in_progress",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": false
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701701616,
+      "status": "in_progress",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": false
+    },
+    {
+      "repo": "davidpovarsky/StreamChatAI-iOS-Demo",
+      "runId": 37701691004,
+      "status": "in_progress",
+      "name": "Live Activity Bridge",
+      "commitMessage": "ci: add event-driven Live Activity updates",
+      "cancelled": false
+    }
+  ],
+  "preservedRuns": [
+    {
+      "repo": "davidpovarsky/cherri",
+      "runId": 37696899301,
+      "status": "queued",
+      "name": "Build & Test",
+      "commitMessage": "fix(v2): emit action UUIDs independently of output name and fix map materialization in lowerer"
+    },
+    {
+      "repo": "davidpovarsky/cherri",
+      "runId": 37696910331,
+      "status": "in_progress",
+      "name": "iOS 27 Shortcuts Runtime PoC",
+      "commitMessage": "fix(v2): emit action UUIDs independently of output name and fix map materialization in lowerer"
+    },
+    {
+      "repo": "davidpovarsky/cherri",
+      "runId": 37696906769,
+      "status": "in_progress",
+      "name": "iOS Build",
+      "commitMessage": "fix(v2): emit action UUIDs independently of output name and fix map materialization in lowerer"
+    },
+    {
+      "repo": "davidpovarsky/hanlin-ai",
+      "runId": 37694262828,
+      "status": "queued",
+      "name": "Build iOS 26 Unsigned IPA",
+      "commitMessage": "ci(router): add master_scenario_semantic_acceptance_tests to affected validation map"
+    }
+  ]
+}
