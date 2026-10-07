@@ -316,6 +316,9 @@ async function executeDirectNotify(inputs, fetchFn = fetchWithTimeout) {
       return { ok: true, status: 'skipped', reason: 'run_attempt_mismatch' };
     }
     run = runData;
+    if (run.name === 'Live Activity Bridge' || String(run.name || '').startsWith('Live Activity Bridge')) {
+      return { ok: true, status: 'skipped', reason: 'bridge_workflow_ignored' };
+    }
     const jobsData = await fetchGithub(`/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`, githubToken, fetchFn);
     jobs = jobsData?.jobs || [];
   } catch (error) {
