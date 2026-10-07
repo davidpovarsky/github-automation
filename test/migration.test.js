@@ -9,16 +9,19 @@ test('workflow instrumentation handles unnamed uses, run, and named steps', () =
   const source = 'jobs:\n  build:\n    steps:\n      - uses: actions/checkout@v4\n      - run: npm ci\n      - name: Build\n        run: npm run build\n';
   const result = instrument(source);
   assert.equal(result.refreshes, 3);
-  assert.equal(result.finals, 1);
-  assert.equal((result.text.match(/uses: davidpovarsky\/github-automation\/live-refresh@main/g) || []).length, 4);
+  assert.equal(result.finals, 0);
+  assert.equal((result.text.match(/uses: davidpovarsky\/github-automation\/live-refresh@main/g) || []).length, 3);
+  assert.match(result.text, /device_id: \${{ secrets.NOTIFY_DEVICE_ID }}/);
+  assert.match(result.text, /token: \${{ secrets.NOTIFY_DEVICE_TOKEN }}/);
+  assert.match(result.text, /github_token: \${{ github.token }}/);
 });
 
-test('workflow instrumentation is granular for partial files and adds one final hint per job', () => {
-  const source = 'jobs:\n  first:\n    steps:\n      - name: Live Activity · refresh\n        uses: davidpovarsky/github-automation/live-refresh@main\n        continue-on-error: true\n      - run: first\n  second:\n    steps:\n      - name: Build\n        run: npm test\n';
+test('workflow instrumentation is granular for partial files and omits unnecessary finals', () => {
+  const source = 'jobs:\n  first:\n    steps:\n      - name: Live Activity · refresh\n        uses: davidpovarsky/github-automation/live-refresh@main\n        continue-on-error: true\n        with:\n          event: refresh\n          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}\n          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}\n          github_token: ${{ github.token }}\n      - run: first\n  second:\n    steps:\n      - name: Build\n        run: npm test\n';
   const result = instrument(source);
   assert.equal(result.modified, true);
   assert.equal(result.refreshes, 1);
-  assert.equal(result.finals, 2);
+  assert.equal(result.finals, 0);
   const again = instrument(result.text);
   assert.equal(again.modified, false);
 });
@@ -44,17 +47,19 @@ test('workflow instrumentation does not treat nested with lists as steps', () =>
   assert.equal(result.refreshes, 1);
 });
 
-test('source action contains no Notify or PAT secret inputs and uses a short timeout', () => {
+test('source action requires no central PAT or Cloudflare endpoint inputs and uses a short timeout', () => {
   const action = fs.readFileSync(path.join(__dirname, '..', 'live-refresh/action.yml'), 'utf8');
   const runtime = fs.readFileSync(path.join(__dirname, '..', 'live-refresh/index.js'), 'utf8');
-  assert.doesNotMatch(action, /NOTIFY_DEVICE|GH_MONITOR_TOKEN|token:/i);
+  assert.doesNotMatch(action, /GH_MONITOR_TOKEN|endpoint:/i);
+  assert.match(action, /device_id:/i);
+  assert.match(action, /token:/i);
   assert.match(runtime, /AbortSignal\.timeout\(1800\)/);
 });
 
-test('fail-open refresh runtime exits successfully when endpoint is unavailable', () => {
+test('fail-open refresh runtime exits successfully when credentials or run are missing', () => {
   const result = childProcess.spawnSync(process.execPath, [path.join(__dirname, '..', 'live-refresh/index.js')], {
     encoding: 'utf8',
-    env: { ...process.env, INPUT_ENDPOINT: 'http://127.0.0.1:1/v1/refresh', INPUT_EVENT: 'refresh', GITHUB_REPOSITORY: 'davidpovarsky/demo', GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '1', GITHUB_REF_NAME: 'main' },
+    env: { ...process.env, INPUT_EVENT: 'refresh', GITHUB_REPOSITORY: 'davidpovarsky/demo', GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '1', GITHUB_REF_NAME: 'main' },
   });
   assert.equal(result.status, 0);
   assert.match(result.stdout, /build continues/);

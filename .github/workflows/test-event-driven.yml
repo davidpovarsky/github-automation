@@ -38,4 +38,3 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run check
-      - run: npx wrangler deploy --dry-run --outdir /tmp/worker-dry-run

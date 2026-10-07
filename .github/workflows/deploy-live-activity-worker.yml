@@ -1,4 +1,6 @@
-name: Deploy Live Activity Worker
+# DEPRECATED: The Cloudflare Worker architecture has been superseded by the direct-to-Notify architecture.
+# This workflow is retired and should not be deployed.
+name: Deploy Live Activity Worker (Deprecated)
 
 on:
   workflow_dispatch:

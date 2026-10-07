@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-10-07T22:18:00Z",
+  "owner": "davidpovarsky",
+  "architecture": "direct-to-notify-actions",
+  "phase": "phase_a_complete_awaiting_secret_gate",
+  "cloudflare": {
+    "status": "retired_not_used",
+    "workerRequired": false,
+    "credentialsRequired": false
+  },
+  "legacyMonitor": {
+    "status": "pending_cutover_after_canary",
+    "willBeDisabledAfterCanary": true
+  },
+  "tests": {
+    "total": 70,
+    "passing": 70,
+    "failing": 0,
+    "coverage": [
+      "start with no existing activity",
+      "start with existing matching activity",
+      "refresh existing activity",
+      "final success",
+      "final failure",
+      "final cancellation",
+      "final ends every duplicate matching activity",
+      "simultaneous refreshes",
+      "simultaneous starts",
+      "duplicate reconciliation",
+      "exact URL matching",
+      "unrelated activities untouched",
+      "missing secrets -> fail open",
+      "Notify error -> fail open",
+      "GitHub API error -> fail open",
+      "config globally disabled",
+      "repository disabled",
+      "branch disabled",
+      "config unavailable",
+      "metric truncation",
+      "instrumentation steps hidden",
+      "next real step selection",
+      "matrix jobs",
+      "parallel jobs",
+      "rerun / run_attempt handling",
+      "requested -> start",
+      "in_progress -> start/ensure",
+      "completed -> final",
+      "bridge does not trigger itself",
+      "instrumentation idempotency",
+      "partial instrumentation",
+      "multiline conditions",
+      "unnamed run/uses steps",
+      "permissions preservation and actions: read"
+    ]
+  },
+  "repositoriesSummary": {
+    "discoveredTotal": 92,
+    "nonArchivedTotal": 92,
+    "publicTotal": 85,
+    "privateTotal": 7,
+    "secretsConfigured": 0,
+    "secretGateStatus": "awaiting_secure_credentials"
+  },
+  "rolloutStatus": {
+    "canaryRun": null,
+    "repositoriesReceivingSecrets": 0,
+    "bridgesInstalled": 1,
+    "branchesInspected": 0,
+    "workflowsModified": 0,
+    "errors": []
+  }
+}

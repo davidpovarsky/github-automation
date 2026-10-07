@@ -1,18 +1,44 @@
 name: Live Activity · refresh
-description: Send a fail-open, identifier-only Live Activity refresh to the central Worker.
+description: Direct-to-Notify Live Activity management and refresh for GitHub Actions.
 author: davidpovarsky
 branding:
   icon: activity
   color: blue
+
 inputs:
   event:
-    description: Refresh hint; use final-hint for an accelerated completion check.
+    description: Lifecycle event (start, refresh, final).
     required: false
     default: refresh
-  endpoint:
-    description: Central Worker refresh endpoint. Leave empty until deployment is configured.
+  device_id:
+    description: Notify! Device ID.
     required: false
     default: ''
+  token:
+    description: Notify! Device Token.
+    required: false
+    default: ''
+  github_token:
+    description: GitHub token for querying repository Actions run and jobs state.
+    required: false
+    default: ''
+  source_repository:
+    description: Source GitHub repository (owner/repo). Defaults to GITHUB_REPOSITORY.
+    required: false
+    default: ''
+  source_run_id:
+    description: Source GitHub Actions run ID. Defaults to GITHUB_RUN_ID.
+    required: false
+    default: ''
+  source_run_attempt:
+    description: Source GitHub Actions run attempt. Defaults to GITHUB_RUN_ATTEMPT.
+    required: false
+    default: ''
+  source_branch:
+    description: Source branch name. Defaults to GITHUB_REF_NAME or GITHUB_HEAD_REF.
+    required: false
+    default: ''
+
 runs:
   using: node24
   main: index.js
