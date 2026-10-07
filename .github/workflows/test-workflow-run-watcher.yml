@@ -7,6 +7,10 @@ on:
     types:
       - in_progress
 
+concurrency:
+  group: notify-watcher-test-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
 permissions:
   actions: read
   contents: read
