@@ -1,0 +1,114 @@
+name: Notify Live Activity
+description: Start, update, and end rich Notify! Live Activities from GitHub Actions.
+author: davidpovarsky
+
+branding:
+  icon: activity
+  color: blue
+
+inputs:
+  action:
+    description: One of start, update, or end.
+    required: true
+
+  device_id:
+    description: Notify! device ID. Required for start.
+    required: true
+
+  token:
+    description: Notify! device token.
+    required: true
+
+  activity_id:
+    description: Notify! Live Activity ID (LAxxxxxx). Required for update/end.
+    required: false
+    default: ""
+
+  new_activity:
+    description: On start, pass new=1 so concurrent/stale runs cannot be mistaken for an update.
+    required: false
+    default: "true"
+
+  title:
+    description: Live Activity title. Required by Notify! when starting a new activity.
+    required: false
+    default: ""
+
+  body:
+    description: Secondary text/fallback line.
+    required: false
+    default: ""
+
+  symbol:
+    description: SF Symbol name, for example hammer.fill.
+    required: false
+    default: ""
+
+  tint:
+    description: Accent color as #RRGGBB or #AARRGGBB.
+    required: false
+    default: ""
+
+  progress:
+    description: Progress from 0 to 100.
+    required: false
+    default: ""
+
+  ends_in:
+    description: Countdown seconds from now (1 to 86400).
+    required: false
+    default: ""
+
+  trailing:
+    description: Static featured text when no countdown is present.
+    required: false
+    default: ""
+
+  status:
+    description: Short phase/status word.
+    required: false
+    default: ""
+
+  steps:
+    description: Total segmented stages.
+    required: false
+    default: ""
+
+  step:
+    description: Current/completed stage.
+    required: false
+    default: ""
+
+  metrics_json:
+    description: JSON array of Notify! metric objects.
+    required: false
+    default: ""
+
+  button_json:
+    description: JSON object describing a Notify! button.
+    required: false
+    default: ""
+
+  keep_for:
+    description: On end, seconds to keep the final Live Activity visible.
+    required: false
+    default: ""
+
+  fail_on_error:
+    description: Fail the GitHub job if Notify! returns an error. Defaults to warning only.
+    required: false
+    default: "false"
+
+outputs:
+  activity_id:
+    description: The precise Live Activity ID returned by Notify!.
+  expires_at:
+    description: Live Activity expiry time returned by Notify!, when present.
+  state:
+    description: Result state such as active, ended, skipped, or error.
+  response_json:
+    description: Compact JSON response from Notify! (or local error object).
+
+runs:
+  using: node24
+  main: index.js
