@@ -220,8 +220,8 @@ async function main() {
   }
 
   const controlConfig = await loadControlConfig();
-  const callerRepository = process.env.GITHUB_REPOSITORY || '';
-  const callerBranch = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || '';
+  const callerRepository = getInput('scope_repository') || process.env.GITHUB_REPOSITORY || '';
+  const callerBranch = getInput('scope_branch') || process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || '';
   const scopeEnabled = resolveScopeEnabled(controlConfig, callerRepository, callerBranch);
 
   if (!scopeEnabled) {
