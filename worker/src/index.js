@@ -1,10 +1,11 @@
 const OWNER = 'davidpovarsky';
 const CONFIG_URL = 'https://raw.githubusercontent.com/davidpovarsky/github-automation/main/config.json';
-const CONFIG_TTL_MS = 30_000;
+const DEFAULT_CONFIG_TTL_MS = 30_000;
 const DEBOUNCE_MS = 1_000;
 const INSTRUMENTATION_PREFIX = 'Live Activity ·';
 
 let configCache = { expiresAt: 0, value: null };
+let configTtlMs = DEFAULT_CONFIG_TTL_MS;
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers } });
@@ -76,7 +77,7 @@ async function loadConfig() {
   if (configCache.value && configCache.expiresAt > Date.now()) return { available: true, value: configCache.value, source: 'cache' };
   try {
     const value = normalizeConfig(await fetchJson(CONFIG_URL, { headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' } }));
-    configCache = { value, expiresAt: Date.now() + CONFIG_TTL_MS };
+    configCache = { value, expiresAt: Date.now() + configTtlMs };
     return { available: true, value, source: 'fresh' };
   } catch {
     if (configCache.value) return { available: true, value: configCache.value, source: 'last-known-good' };
@@ -97,6 +98,35 @@ async function notify(env, action, activityId, payload = {}) {
   return body;
 }
 
+function runUrl(run, repository) {
+  return run.html_url || `https://github.com/${repository}/actions/runs/${run.id}`;
+}
+
+async function listDeviceActivities(env) {
+  const url = new URL(`https://push.getnotifyapp.com/live-activity/${encodeURIComponent(env.NOTIFY_DEVICE_ID)}`);
+  url.searchParams.set('token', env.NOTIFY_DEVICE_TOKEN);
+  return fetchJson(url, { method: 'GET', headers: { Accept: 'application/json', 'user-agent': 'davidpovarsky/github-live-activity-recovery' } });
+}
+
+function matchingActivities(listResponse, targetUrl) {
+  const activities = Array.isArray(listResponse?.activities) ? listResponse.activities : [];
+  return activities.filter(activity => activity?.state === 'active' && activity?.content?.button?.url === targetUrl && /^LA[A-Z0-9]{6,}$/i.test(String(activity.activityId || '')));
+}
+
+function activityTimestamp(activity) {
+  const value = activity?.updatedAt || activity?.startedAt || activity?.createdAt || '';
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? time : 0;
+}
+
+async function recoverActivity(env, run, repository) {
+  const response = await listDeviceActivities(env);
+  const matches = matchingActivities(response, runUrl(run, repository));
+  if (!matches.length) return { activityId: '', anomaly: false };
+  const sorted = [...matches].sort((a, b) => activityTimestamp(b) - activityTimestamp(a) || String(b.activityId).localeCompare(String(a.activityId)));
+  return { activityId: sorted[0].activityId, anomaly: matches.length > 1 };
+}
+
 function statusFor(conclusion) {
   const value = String(conclusion || 'completed').toLowerCase();
   return value === 'success' ? 'Success' : value === 'cancelled' ? 'Cancelled' : value === 'skipped' ? 'Skipped' : 'Failure';
@@ -115,7 +145,7 @@ async function verifiedRun(env, input) {
   return { repository, run, jobs: jobs.jobs || [] };
 }
 
-async function reconcile(state, env, input, delayMs = 60_000) {
+async function reconcile(state, env, input, delayMs = 60_000, persist = async () => {}) {
   const { repository, run, jobs } = await verifiedRun(env, input);
   const configResult = await loadConfig();
   // Completion is authoritative even when config is unavailable or disabled.
@@ -144,9 +174,19 @@ async function reconcile(state, env, input, delayMs = 60_000) {
     return { state, alarm: false };
   }
   const view = activityView(run, jobs);
+  if (!state.activityId && (state.lifecycle === 'starting' || state.startAttemptedAt)) {
+    const recovered = await recoverActivity(env, run, repository);
+    if (recovered.activityId) {
+      state.activityId = recovered.activityId;
+      state.recoveredActivity = true;
+      state.recoveryAnomaly = recovered.anomaly;
+      state.lifecycle = 'active';
+    }
+  }
   if (!state.activityId) {
     state.lifecycle = 'starting';
     state.startAttemptedAt = Date.now();
+    await persist(state);
     const started = await notify(env, 'start', '', { title: repository.split('/').pop(), body: run.name, symbol: 'hammer.fill', tint: '#0A84FF', progress: 0, status: run.status === 'queued' ? 'Queued' : 'Running', metrics: [{ label: 'Branch', value: short(branch) }, { label: 'Workflow', value: short(run.name) }], button: runButton(run, repository) });
     state.activityId = started.activityId || '';
     if (!state.activityId) throw new Error('Notify start returned no activityId');
@@ -179,9 +219,9 @@ export class RunState {
       if (current.finalised) return json({ ok: true, finalised: true, debounced: false });
       const now = Date.now();
       const finalHint = input.event === 'final-hint';
-      if (!finalHint && current.lastRequestAt && now - current.lastRequestAt < DEBOUNCE_MS) return json({ ok: true, debounced: true, activity_id: current.activityId || null, finalised: false });
+      if (!finalHint && current.lifecycle !== 'starting' && current.lastRequestAt && now - current.lastRequestAt < DEBOUNCE_MS) return json({ ok: true, debounced: true, activity_id: current.activityId || null, finalised: false });
       current.lastRequestAt = now;
-      const result = await reconcile(current, this.env, input, finalHint ? 5_000 : 60_000);
+      const result = await reconcile(current, this.env, input, finalHint ? 5_000 : 60_000, state => this.state.storage.put('state', state));
       await this.state.storage.put('state', result.state);
       if (result.alarm) await this.state.storage.setAlarm(Date.now() + result.delayMs); else await this.state.storage.deleteAlarm();
       return json({ ok: true, activity_id: result.state.activityId || null, finalised: !!result.state.finalised, debounced: false });
@@ -191,7 +231,7 @@ export class RunState {
     const state = await this.state.storage.get('state');
     if (!state || state.finalised) return;
     try {
-      const result = await reconcile(state, this.env, { repository: state.repository, run_id: state.runId, run_attempt: state.runAttempt }, 60_000);
+      const result = await reconcile(state, this.env, { repository: state.repository, run_id: state.runId, run_attempt: state.runAttempt }, 60_000, nextState => this.state.storage.put('state', nextState));
       await this.state.storage.put('state', result.state);
       if (result.alarm) await this.state.storage.setAlarm(Date.now() + result.delayMs); else await this.state.storage.deleteAlarm();
     } catch { await this.state.storage.setAlarm(Date.now() + 60_000); }
@@ -213,4 +253,9 @@ export default {
 
 export function resetConfigCacheForTests() {
   configCache = { expiresAt: 0, value: null };
+  configTtlMs = DEFAULT_CONFIG_TTL_MS;
+}
+
+export function setConfigTtlForTests(value) {
+  configTtlMs = Math.max(0, Number(value));
 }

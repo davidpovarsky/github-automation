@@ -9,9 +9,26 @@ const PREFIX = 'Live Activity ·';
 function indentOf(line) { return line.match(/^\s*/)[0].length; }
 function isListItem(line, indent) { return indentOf(line) === indent && /^\s*-\s+/.test(line); }
 function isInstrumentationStep(lines) { return lines.some(line => line.includes(ACTION) || line.includes(PREFIX)); }
-function renderRefresh(indent, conditionLine) {
+function conditionLines(stepLines) {
+  const index = stepLines.findIndex(line => /^\s*if:\s*/.test(line));
+  if (index < 0) return [];
+  const first = stepLines[index];
+  const conditionIndent = indentOf(first);
+  const result = [first.trim()];
+  for (let i = index + 1; i < stepLines.length; i += 1) {
+    const line = stepLines[i];
+    if (line.trim() && indentOf(line) <= conditionIndent) break;
+    if (!line.trim()) { result.push(''); continue; }
+    result.push(`${' '.repeat(Math.max(0, indentOf(line) - conditionIndent))}${line.trim()}`);
+  }
+  return result;
+}
+function renderRefresh(indent, condition) {
   const pad = ' '.repeat(indent);
-  return [`${pad}- name: Live Activity · refresh`, conditionLine ? `${pad}  ${conditionLine.trim()}` : null, `${pad}  uses: ${ACTION}`, `${pad}  continue-on-error: true`].filter(Boolean);
+  const renderedCondition = condition.length
+    ? condition.map((line, index) => index === 0 ? `${pad}  ${line}` : `${pad}  ${line}`)
+    : [];
+  return [`${pad}- name: Live Activity · refresh`, ...renderedCondition, `${pad}  uses: ${ACTION}`, `${pad}  continue-on-error: true`];
 }
 function renderFinal(indent) {
   const pad = ' '.repeat(indent);
@@ -59,8 +76,7 @@ function instrument(text) {
       const previous = items.find(candidate => candidate.end === item.start);
       const alreadyHasRefresh = previous && previous.lines.some(candidate => candidate.includes('Live Activity · refresh') || candidate.includes(ACTION));
       if (!alreadyHasRefresh) {
-        const condition = item.lines.find(candidate => /^\s*if:\s*/.test(candidate));
-        output.push(...renderRefresh(itemIndent, condition));
+        output.push(...renderRefresh(itemIndent, conditionLines(item.lines)));
         refreshes += 1;
         modified = true;
       }

@@ -4,19 +4,18 @@ This repository now contains the central event-driven implementation in `worker/
 
 ## Deployment gate
 
-Cloudflare authentication is intentionally required before any source repository is modified. From an authenticated environment:
+Cloudflare authentication is intentionally required before any source repository is modified. Deployment is prepared for an iPad-friendly, manual-only GitHub Actions workflow at `.github/workflows/deploy-live-activity-worker.yml`; it does not require `wrangler login` or a local terminal.
 
-```sh
-npx wrangler login
-npx wrangler deploy
-npx wrangler secret put GH_MONITOR_TOKEN
-npx wrangler secret put NOTIFY_DEVICE_ID
-npx wrangler secret put NOTIFY_DEVICE_TOKEN
+Add only these two GitHub repository secrets before manually running that workflow:
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
 ```
 
-The three commands reading secret values are interactive and must be performed by the account owner. Values must never be committed or copied to source repositories.
+The workflow securely forwards the already-existing central GitHub/Notify secrets to Cloudflare as Worker secrets using the official Wrangler action. Values must never be committed or copied to source repositories. The workflow deploys, resolves the stable Worker URL, verifies `GET /health`, and prints the URL in the GitHub job summary. It does not run canary instrumentation automatically.
 
-After deployment, set the Worker URL as the default endpoint in `live-refresh/action.yml` (or pass `endpoint` explicitly in a canary), verify `GET /health`, and run the canary workflow before mass rollout.
+After the first successful deployment, set the real Worker URL as the default endpoint in `live-refresh/action.yml` (a separate small commit), then run the external canary before mass rollout.
 
 ## Architecture
 

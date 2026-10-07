@@ -1,0 +1,86 @@
+name: Deploy Live Activity Worker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy Worker and verify health
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check Cloudflare authentication secrets
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "${CLOUDFLARE_API_TOKEN}" || -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
+            echo '::error::Missing CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID repository secret.'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+
+      - name: Deploy Worker and configure encrypted Worker secrets
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4'
+          command: deploy
+          secrets: |
+            GH_MONITOR_TOKEN
+            NOTIFY_DEVICE_ID
+            NOTIFY_DEVICE_TOKEN
+        env:
+          GH_MONITOR_TOKEN: ${{ secrets.GH_MONITOR_TOKEN }}
+          NOTIFY_DEVICE_ID: ${{ secrets.NOTIFY_DEVICE_ID }}
+          NOTIFY_DEVICE_TOKEN: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+
+      - name: Resolve stable Worker URL
+        id: endpoint
+        shell: bash
+        env:
+          DEPLOY_OUTPUT: ${{ steps.deploy.outputs.command-output }}
+        run: |
+          worker_url="$(printf '%s' "${DEPLOY_OUTPUT}" | grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' | tail -n 1 || true)"
+          if [[ -z "${worker_url}" ]]; then
+            echo '::error::Wrangler did not report a stable workers.dev URL; refusing to run an unverifiable health check.'
+            exit 1
+          fi
+          echo "url=${worker_url}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify Worker health
+        env:
+          WORKER_URL: ${{ steps.endpoint.outputs.url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          http_code="$(curl --fail-with-body --silent --show-error --max-time 10 -o /tmp/health.json -w '%{http_code}' "${WORKER_URL}/health")"
+          [[ "${http_code}" == '200' ]]
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          body = json.loads(Path('/tmp/health.json').read_text())
+          expected = {'ok': True, 'service': 'github-live-activity'}
+          if body != expected:
+              raise SystemExit(f'Unexpected health response: {body!r}')
+          PY
+
+      - name: Publish Worker URL
+        env:
+          WORKER_URL: ${{ steps.endpoint.outputs.url }}
+        run: |
+          {
+            echo '## Live Activity Worker deployed'
+            echo
+            echo "Worker URL: ${WORKER_URL}"
+            echo "Health: ${WORKER_URL}/health"
+            echo
+            echo 'No canary or source-repository instrumentation was run by this workflow.'
+          } >> "${GITHUB_STEP_SUMMARY}"

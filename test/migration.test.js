@@ -29,6 +29,15 @@ test('workflow instrumentation mirrors original conditions and expressions', () 
   assert.equal((result.text.match(/if: \$\{\{ github\.ref == \'refs\/heads\/main\' \}\}/g) || []).length, 2);
 });
 
+test('workflow instrumentation preserves multiline if block scalars', () => {
+  const source = 'jobs:\n  build:\n    steps:\n      - name: Push only\n        if: >\n          github.event_name == \'push\' &&\n          github.ref == \'refs/heads/main\'\n        run: ./push.sh\n      - name: Main only\n        if: |\n          always() &&\n          github.ref_name == \'main\'\n        run: ./main.sh\n';
+  const result = instrument(source);
+  assert.equal((result.text.match(/if: >/g) || []).length, 2);
+  assert.equal((result.text.match(/if: \|/g) || []).length, 2);
+  assert.equal((result.text.match(/github\.ref == \'refs\/heads\/main\'/g) || []).length, 2);
+  assert.equal((result.text.match(/github\.ref_name == \'main\'/g) || []).length, 2);
+});
+
 test('workflow instrumentation does not treat nested with lists as steps', () => {
   const source = 'jobs:\n  build:\n    steps:\n      - uses: actions/example@v1\n        with:\n          items:\n            - one\n            - two\n';
   const result = instrument(source);
@@ -51,10 +60,11 @@ test('fail-open refresh runtime exits successfully when endpoint is unavailable'
   assert.match(result.stdout, /build continues/);
 });
 
-test('worker source contains explicit queue and fail-closed config behavior', () => {
+test('worker source contains explicit queue, recovery, and fail-closed config behavior', () => {
   const worker = fs.readFileSync(path.join(__dirname, '..', 'worker/src/index.js'), 'utf8');
   assert.match(worker, /this\.queue\.then/);
   assert.match(worker, /configResult\.available/);
+  assert.match(worker, /recoverActivity/);
   assert.match(worker, /state\.lifecycle = 'starting'/);
   assert.match(worker, /state\.lifecycle = 'finalized'/);
 });
