@@ -75,6 +75,14 @@ jobs:
     timeout-minutes: ${{ inputs.max_minutes }}
 
     steps:
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Checkout central automation
         uses: actions/checkout@v4
         with:
@@ -83,6 +91,14 @@ jobs:
           path: .github-automation
           persist-credentials: false
 
+      - name: Live Activity · refresh
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Check source run is still active
         id: gate
         env:
@@ -104,6 +120,15 @@ jobs:
             echo "should_monitor=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Live Activity · refresh
+        if: steps.gate.outputs.should_monitor == 'true'
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Start Live Activity
         id: notify
         if: steps.gate.outputs.should_monitor == 'true'
@@ -127,6 +152,15 @@ jobs:
               {"label":"Run","value":"#${{ inputs.source_run_number || github.run_number }}"}
             ]
 
+      - name: Live Activity · refresh
+        if: steps.notify.outputs.activity_id != ''
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: Follow workflow jobs
         id: follow
         if: steps.notify.outputs.activity_id != ''
@@ -143,6 +177,15 @@ jobs:
           SOURCE_RUN_NUMBER: ${{ inputs.source_run_number }}
         run: node .github-automation/scripts/monitor-run.js
 
+      - name: Live Activity · refresh
+        if: always() && steps.notify.outputs.activity_id != ''
+        uses: davidpovarsky/github-automation/live-refresh@main
+        continue-on-error: true
+        with:
+          event: refresh
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          github_token: ${{ github.token }}
       - name: End Live Activity
         if: always() && steps.notify.outputs.activity_id != ''
         uses: davidpovarsky/github-automation@main
