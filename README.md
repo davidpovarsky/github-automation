@@ -102,6 +102,39 @@ Content:
 - `response_json`
 
 
+
+## Recommended rollout: one watcher per repository
+
+The preferred integration is now **one tiny watcher workflow on the default branch of each repository**. You do **not** need to edit every existing build workflow and you do **not** need to copy the watcher into every branch.
+
+Copy `templates/notify-live-activity-watcher.yml` into the target repository as:
+
+```
+.github/workflows/notify-live-activity-watcher.yml
+```
+
+It uses GitHub's `workflow_run` event with a wildcard workflow filter, so it observes workflows started from any branch while the watcher itself lives only on the default branch.
+
+For each source run it:
+
+1. starts one Notify! Live Activity,
+2. polls the real source run through the GitHub Actions API,
+3. updates the active job, active step and overall job progress,
+4. ends the same Live Activity on success/failure/cancel,
+5. uses the source repository and source branch when evaluating `config.json`.
+
+Duplicate `workflow_run` events are serialized by source run ID. A queued duplicate checks whether the source run already completed and exits without creating a second Live Activity.
+
+### Repository secrets
+
+Until a shared secret mechanism is configured, each watched repository needs:
+
+- `NOTIFY_DEVICE_ID`
+- `NOTIFY_DEVICE_TOKEN`
+
+The watcher passes those values to the central reusable workflow. Branches do not need separate secrets.
+
+
 ## Central on/off control
 
 Every repository should call this action with:
