@@ -1,0 +1,30 @@
+name: Notify Live Activity Watcher
+
+on:
+  workflow_run:
+    workflows:
+      - "*"
+      - "!Notify Live Activity Watcher"
+    types:
+      - in_progress
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  watch:
+    if: ${{ github.event.workflow_run.name != 'Notify Live Activity Watcher' }}
+    uses: davidpovarsky/github-automation/.github/workflows/monitor.yml@main
+    with:
+      title: ${{ github.event.repository.name }}
+      source_run_id: ${{ github.event.workflow_run.id }}
+      source_repository: ${{ github.repository }}
+      source_branch: ${{ github.event.workflow_run.head_branch }}
+      source_workflow: ${{ github.event.workflow_run.name }}
+      source_run_number: ${{ github.event.workflow_run.run_number }}
+      poll_seconds: 10
+      keep_for: 60
+    secrets:
+      notify_device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+      notify_device_token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
