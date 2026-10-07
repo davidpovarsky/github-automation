@@ -24,6 +24,16 @@ inputs:
     required: false
     default: ""
 
+  scope_repository:
+    description: Repository used for central config matching. Defaults to GITHUB_REPOSITORY.
+    required: false
+    default: ""
+
+  scope_branch:
+    description: Branch used for central config matching. Defaults to the current GitHub ref.
+    required: false
+    default: ""
+
   new_activity:
     description: On start, pass new=1 so concurrent/stale runs cannot be mistaken for an update.
     required: false
