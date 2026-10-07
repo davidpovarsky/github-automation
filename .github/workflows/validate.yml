@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   syntax:
-    name: Syntax and metadata
+    name: Syntax, metadata, and runtime
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,3 +46,18 @@ jobs:
               raise SystemExit(f"Missing required action.yml entries: {missing}")
 
           print("action.yml basic validation passed")
+
+      - name: Exercise action without credentials
+        id: smoke
+        uses: ./
+        with:
+          action: start
+          device_id: ""
+          token: ""
+          title: "Validation smoke test"
+
+      - name: Verify safe skip behavior
+        shell: bash
+        run: |
+          test "${{ steps.smoke.outputs.state }}" = "skipped"
+          echo "Runtime smoke test passed"
