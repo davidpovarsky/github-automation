@@ -1,8 +1,73 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 
 const BASE_URL = 'https://push.getnotifyapp.com';
+
+function loadControlConfig() {
+  const configPath = path.join(__dirname, 'config.json');
+
+  try {
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const parsed = JSON.parse(raw);
+
+    return {
+      enabled: parsed.enabled !== false,
+      repositories: parsed.repositories && typeof parsed.repositories === 'object'
+        ? parsed.repositories
+        : { '*': true },
+      branches: parsed.branches && typeof parsed.branches === 'object'
+        ? parsed.branches
+        : {},
+      endExistingWhenDisabled: parsed.endExistingWhenDisabled !== false,
+    };
+  } catch (error) {
+    warning(`Unable to read central config.json; defaulting Live Activities to enabled: ${error.message}`);
+    return {
+      enabled: true,
+      repositories: { '*': true },
+      branches: {},
+      endExistingWhenDisabled: true,
+    };
+  }
+}
+
+function resolveScopeEnabled(config, repository, branch) {
+  if (!config.enabled) return false;
+
+  let enabled = true;
+
+  if (Object.prototype.hasOwnProperty.call(config.repositories, '*')) {
+    enabled = config.repositories['*'] !== false;
+  }
+
+  if (repository && Object.prototype.hasOwnProperty.call(config.repositories, repository)) {
+    enabled = config.repositories[repository] !== false;
+  }
+
+  const globalBranchRules = config.branches['*'];
+  if (globalBranchRules && typeof globalBranchRules === 'object') {
+    if (Object.prototype.hasOwnProperty.call(globalBranchRules, '*')) {
+      enabled = globalBranchRules['*'] !== false;
+    }
+    if (branch && Object.prototype.hasOwnProperty.call(globalBranchRules, branch)) {
+      enabled = globalBranchRules[branch] !== false;
+    }
+  }
+
+  const repoBranchRules = repository ? config.branches[repository] : undefined;
+  if (repoBranchRules && typeof repoBranchRules === 'object') {
+    if (Object.prototype.hasOwnProperty.call(repoBranchRules, '*')) {
+      enabled = repoBranchRules['*'] !== false;
+    }
+    if (branch && Object.prototype.hasOwnProperty.call(repoBranchRules, branch)) {
+      enabled = repoBranchRules[branch] !== false;
+    }
+  }
+
+  return enabled;
+}
 
 function getInput(name) {
   return (process.env[`INPUT_${name.toUpperCase()}`] || '').trim();
@@ -133,6 +198,32 @@ async function main() {
 
   if (!['start', 'update', 'end'].includes(action)) {
     throw new Error(`Input "action" must be start, update, or end; got "${action || '(empty)'}".`);
+  }
+
+  const controlConfig = loadControlConfig();
+  const callerRepository = process.env.GITHUB_REPOSITORY || '';
+  const callerBranch = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || '';
+  const scopeEnabled = resolveScopeEnabled(controlConfig, callerRepository, callerBranch);
+
+  if (!scopeEnabled) {
+    const scope = callerRepository
+      ? `${callerRepository}${callerBranch ? ` @ ${callerBranch}` : ''}`
+      : 'current workflow';
+
+    // If a Live Activity already exists when the central switch is turned off,
+    // still allow the final end call so the tile can be dismissed cleanly.
+    if (!(action === 'end' && activityIdInput && controlConfig.endExistingWhenDisabled)) {
+      const message = `Notify! Live Activities are disabled centrally for ${scope}.`;
+      console.log(message);
+      emitResult({
+        activityId: activityIdInput,
+        state: 'skipped_disabled',
+        response: { success: true, skipped: true, disabled: true, message },
+      });
+      return;
+    }
+
+    console.log(`Notify!: central sending is disabled for ${scope}, but endExistingWhenDisabled allows cleanup of ${activityIdInput}.`);
   }
 
   // GitHub intentionally withholds repository secrets from fork PRs.
