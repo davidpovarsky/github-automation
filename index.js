@@ -63,6 +63,18 @@ function normalizeMetrics(metrics) {
     // callers do not hit the Shortcuts-style number/string serialization bug.
     if (result.value !== undefined && result.value !== null) {
       result.value = String(result.value);
+
+      // Notify! currently limits metric values to 1–16 characters.
+      // Truncate safely instead of letting an otherwise valid workflow fail.
+      if (result.value.length > 16) {
+        const original = result.value;
+        result.value = original.slice(0, 15) + '…';
+        warning(`metrics_json[${index}].value exceeded 16 characters and was truncated to "${result.value}".`);
+      }
+
+      if (result.value.length < 1) {
+        throw new Error(`metrics_json[${index}].value must contain at least 1 character.`);
+      }
     }
     if (result.label !== undefined && result.label !== null) {
       result.label = String(result.label);
