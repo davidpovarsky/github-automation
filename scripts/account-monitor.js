@@ -32,7 +32,7 @@ function runLink(run) {
 
 function runButton(run) {
   return JSON.stringify({
-    title: 'GitHub ↗',
+    title: `#${run.run_number} ↗`,
     url: runLink(run),
     open: true,
     method: 'GET',
@@ -177,7 +177,7 @@ function startActivity(run) {
     token: DEVICE_TOKEN,
     scope_repository: run.repository.full_name,
     scope_branch: run.head_branch || '',
-    title: `${repoName} · #${run.run_number}`,
+    title: repoName,
     body: run.name,
     symbol: 'hammer.fill',
     tint: '#0A84FF',
