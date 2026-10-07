@@ -11,7 +11,6 @@ on:
       - "Validate action"
       - "Watcher Source Test"
     types:
-      - requested
       - in_progress
       - completed
 

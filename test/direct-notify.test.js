@@ -33,6 +33,7 @@ function createHarness({
   configFailure = false,
   githubFailure = false,
   notifyFailure = false,
+  throttleStart = false,
   activities = [],
   onStart = null,
 } = {}) {
@@ -123,12 +124,26 @@ function createHarness({
       }
 
       if (method === 'POST') {
-        const isStart = urlStr.includes('new=1');
+        const isStart = !urlStr.includes('/LA');
+        if (isStart && throttleStart) {
+          return {
+            ok: false,
+            status: 429,
+            headers: { get: (hdr) => hdr.toLowerCase() === 'retry-after' ? '6780' : null },
+            json: async () => ({
+              error: 'Too Many Requests',
+              message: 'Apple is silently ignoring Live Activity starts for this device right now: 5 in a row were accepted but no tile ever appeared.',
+              unansweredStarts: 5,
+              retryAfterSeconds: 6780,
+              openingTheAppMayHelp: false,
+            }),
+          };
+        }
         const actId = isStart ? `LA_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` : 'LA_UPDATED';
         if (isStart) {
           const newAct = {
             activityId: actId,
-            state: 'active',
+            state: 'starting',
             content: body,
             createdAt: new Date().toISOString(),
           };
@@ -173,13 +188,14 @@ function createHarness({
 }
 
 // 1. start with no existing activity
-test('start with no existing activity creates a new activity', async () => {
+test('start with no existing activity creates a new activity without new=1', async () => {
   const h = createHarness();
   const res = await executeDirectNotify({ ...h.defaultInputs, event: 'start' }, h.mockFetch);
   assert.equal(res.ok, true);
   assert.match(res.status, /^started/);
-  const startCall = h.calls.find(c => c.method === 'POST' && c.url.includes('new=1'));
+  const startCall = h.calls.find(c => c.method === 'POST' && c.url.includes('/live-activity/DEV_123'));
   assert.ok(startCall);
+  assert.equal(startCall.url.includes('new=1'), false, 'Should not use new=1 when device has 0 activities');
   assert.equal(startCall.body.title, 'demo');
   assert.equal(startCall.body.symbol, 'hammer.fill');
   assert.equal(startCall.body.tint, '#0A84FF');
@@ -199,7 +215,7 @@ test('start with existing matching activity ensures/updates and does not create 
   assert.equal(res.ok, true);
   assert.equal(res.status, 'updated');
   assert.equal(res.activityId, 'LA_EXISTING');
-  const startCalls = h.calls.filter(c => c.method === 'POST' && c.url.includes('new=1'));
+  const startCalls = h.calls.filter(c => c.method === 'POST' && !c.url.includes('/LA'));
   assert.equal(startCalls.length, 0);
   const updateCall = h.calls.find(c => c.method === 'POST' && c.url.includes('LA_EXISTING'));
   assert.ok(updateCall);
@@ -310,7 +326,7 @@ test('simultaneous refreshes safely update canonical without creating duplicates
   const tasks = Array.from({ length: 25 }, () => executeDirectNotify(h.defaultInputs, h.mockFetch));
   const results = await Promise.all(tasks);
   assert.equal(results.every(r => r.ok && r.status === 'updated'), true);
-  const startCalls = h.calls.filter(c => c.method === 'POST' && c.url.includes('new=1'));
+  const startCalls = h.calls.filter(c => c.method === 'POST' && !c.url.includes('/LA'));
   assert.equal(startCalls.length, 0);
 });
 
@@ -553,14 +569,160 @@ test('mismatched run attempt is skipped cleanly', async () => {
   assert.equal(res.reason, 'run_attempt_mismatch');
 });
 
-// 26. requested -> start behavior
-test('requested event starts activity even with 0 jobs scheduled', async () => {
-  const h = createHarness({ jobs: [], run: { status: 'queued' } });
+// 26. lifecycle types
+test('lifecycle: bridge template does not listen to requested, listens to in_progress and completed', () => {
+  const bridgeYaml = fs.readFileSync(path.join(__dirname, '../templates/live-activity-bridge.yml'), 'utf8');
+  assert.doesNotMatch(bridgeYaml, /-\s*requested/);
+  assert.match(bridgeYaml, /-\s*in_progress/);
+  assert.match(bridgeYaml, /-\s*completed/);
+  assert.match(bridgeYaml, /event:\s*\${{\s*github\.event\.action == 'completed' && 'final' \|\| 'start'\s*}}/);
+});
+
+// 26b. start with existing starting activity
+test('start: existing starting activity treats start as in flight without creating another', async () => {
+  const existing = {
+    activityId: 'LA_STARTING',
+    state: 'starting',
+    content: { button: { url: 'https://github.com/davidpovarsky/demo/actions/runs/42' } },
+    createdAt: '2026-10-07T12:00:00Z',
+  };
+  const h = createHarness({ activities: [existing] });
   const res = await executeDirectNotify({ ...h.defaultInputs, event: 'start' }, h.mockFetch);
   assert.equal(res.ok, true);
-  assert.match(res.status, /^started/);
-  const startCall = h.calls.find(c => c.method === 'POST' && c.url.includes('new=1'));
-  assert.equal(startCall.body.status, 'Queued');
+  assert.equal(res.status, 'existing_starting_activity');
+  assert.equal(res.activityId, 'LA_STARTING');
+  const startCalls = h.calls.filter(c => c.method === 'POST' && !c.url.includes('/LA'));
+  assert.equal(startCalls.length, 0);
+});
+
+// 26c. refresh with no matching activity
+test('refresh: refresh with no matching activity skips cleanly without creating activity', async () => {
+  const h = createHarness({ activities: [] });
+  const res = await executeDirectNotify({ ...h.defaultInputs, event: 'refresh' }, h.mockFetch);
+  assert.equal(res.ok, true);
+  assert.equal(res.status, 'no_existing_activity');
+  const postCalls = h.calls.filter(c => c.method === 'POST');
+  assert.equal(postCalls.length, 0);
+});
+
+// 26d. refresh with starting activity
+test('refresh: refresh with starting activity does not issue start or update', async () => {
+  const existing = {
+    activityId: 'LA_STARTING',
+    state: 'starting',
+    content: { button: { url: 'https://github.com/davidpovarsky/demo/actions/runs/42' } },
+    createdAt: '2026-10-07T12:00:00Z',
+  };
+  const h = createHarness({ activities: [existing] });
+  const res = await executeDirectNotify({ ...h.defaultInputs, event: 'refresh' }, h.mockFetch);
+  assert.equal(res.ok, true);
+  assert.equal(res.status, 'existing_starting_activity');
+  const postCalls = h.calls.filter(c => c.method === 'POST');
+  assert.equal(postCalls.length, 0);
+});
+
+// 26e. 100 simultaneous refreshes with no activity
+test('refresh: 100 simultaneous refreshes with no activity produce ZERO starts', async () => {
+  const h = createHarness({ activities: [] });
+  const tasks = Array.from({ length: 100 }, () =>
+    executeDirectNotify({ ...h.defaultInputs, event: 'refresh' }, h.mockFetch)
+  );
+  const results = await Promise.all(tasks);
+  assert.equal(results.every(r => r.ok && r.status === 'no_existing_activity'), true);
+  const postCalls = h.calls.filter(c => c.method === 'POST');
+  assert.equal(postCalls.length, 0);
+});
+
+// 26f. 100 sequential refreshes with no activity
+test('refresh: 100 sequential refreshes with no activity produce ZERO starts', async () => {
+  const h = createHarness({ activities: [] });
+  for (let i = 0; i < 100; i++) {
+    const res = await executeDirectNotify({ ...h.defaultInputs, event: 'refresh' }, h.mockFetch);
+    assert.equal(res.ok, true);
+    assert.equal(res.status, 'no_existing_activity');
+  }
+  const postCalls = h.calls.filter(c => c.method === 'POST');
+  assert.equal(postCalls.length, 0);
+});
+
+// 26g. throttling handling
+test('throttling: 429 response on start is parsed correctly and fails open', async () => {
+  const h = createHarness({ throttleStart: true });
+  const res = await executeDirectNotify({ ...h.defaultInputs, event: 'start' }, h.mockFetch);
+  assert.equal(res.ok, true);
+  assert.equal(res.status, 'notify_start_throttled');
+  assert.equal(res.retryAfterSeconds, 6780);
+  assert.equal(res.unansweredStarts, 5);
+  assert.equal(res.openingTheAppMayHelp, false);
+  const postCalls = h.calls.filter(c => c.method === 'POST' && !c.url.includes('/LA'));
+  assert.equal(postCalls.length, 1, 'Should not retry immediately');
+});
+
+// 26h. subsequent refresh calls do not trigger start after 429
+test('throttling: subsequent refresh calls do not trigger start after throttled start', async () => {
+  const h = createHarness({ throttleStart: true });
+  await executeDirectNotify({ ...h.defaultInputs, event: 'start' }, h.mockFetch);
+  const resRefresh = await executeDirectNotify({ ...h.defaultInputs, event: 'refresh' }, h.mockFetch);
+  assert.equal(resRefresh.ok, true);
+  assert.equal(resRefresh.status, 'no_existing_activity');
+  const postCalls = h.calls.filter(c => c.method === 'POST' && !c.url.includes('/LA'));
+  assert.equal(postCalls.length, 1, 'Only original start attempted, refresh did not start');
+});
+
+// 26i. concurrency
+test('concurrency: one start followed by many refreshes while starting produces exactly ONE start call', async () => {
+  const h = createHarness({ activities: [] });
+  const startRes = await executeDirectNotify({ ...h.defaultInputs, event: 'start' }, h.mockFetch);
+  assert.equal(startRes.ok, true);
+  assert.equal(startRes.status, 'started');
+
+  const refreshTasks = Array.from({ length: 25 }, () =>
+    executeDirectNotify({ ...h.defaultInputs, event: 'refresh' }, h.mockFetch)
+  );
+  const refreshResults = await Promise.all(refreshTasks);
+  assert.equal(refreshResults.every(r => r.ok && r.status === 'existing_starting_activity'), true);
+
+  const startCalls = h.calls.filter(c => c.method === 'POST' && !c.url.includes('/LA'));
+  assert.equal(startCalls.length, 1);
+});
+
+// 26j. new=1 policy
+test('new=1 policy: start uses new=1 only when another unrelated activity exists', async () => {
+  const unrelated = {
+    activityId: 'LA_UNRELATED',
+    state: 'active',
+    content: { button: { url: 'https://github.com/davidpovarsky/other-repo/actions/runs/999' } },
+  };
+  const h = createHarness({ activities: [unrelated] });
+  const res = await executeDirectNotify({ ...h.defaultInputs, event: 'start' }, h.mockFetch);
+  assert.equal(res.ok, true);
+  assert.equal(res.useNew, true);
+  const startCall = h.calls.find(c => c.method === 'POST' && !c.url.includes('/LA'));
+  assert.ok(startCall);
+  assert.equal(startCall.url.includes('new=1'), true);
+});
+
+test('new=1 policy: refresh never uses new=1', async () => {
+  const existing = {
+    activityId: 'LA_MINE',
+    state: 'active',
+    content: { button: { url: 'https://github.com/davidpovarsky/demo/actions/runs/42' } },
+  };
+  const h = createHarness({ activities: [existing] });
+  await executeDirectNotify({ ...h.defaultInputs, event: 'refresh' }, h.mockFetch);
+  const new1Calls = h.calls.filter(c => c.url.includes('new=1'));
+  assert.equal(new1Calls.length, 0);
+});
+
+// 26k. final never creates
+test('final: final never creates an activity when none exists', async () => {
+  const h = createHarness({ activities: [] });
+  const res = await executeDirectNotify({ ...h.defaultInputs, event: 'final' }, h.mockFetch);
+  assert.equal(res.ok, true);
+  assert.equal(res.status, 'ended');
+  assert.equal(res.count, 0);
+  const postCalls = h.calls.filter(c => c.method === 'POST');
+  assert.equal(postCalls.length, 0);
 });
 
 // 27. in_progress -> start/ensure

@@ -66,7 +66,6 @@ on:
     workflows:
 ${workflowsYaml}
     types:
-      - requested
       - in_progress
       - completed
 

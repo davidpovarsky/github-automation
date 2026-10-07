@@ -131,11 +131,18 @@ function statusFor(conclusion) {
   return val.charAt(0).toUpperCase() + val.slice(1);
 }
 
+const TERMINAL_STATES = new Set(['ended', 'dismissed', 'expired']);
+
+function isTerminalState(state) {
+  return TERMINAL_STATES.has(String(state || '').toLowerCase());
+}
+
 function matchingActivities(listResponse, targetUrl) {
-  const activities = Array.isArray(listResponse?.activities) ? listResponse.activities : [];
+  const activities = Array.isArray(listResponse?.activities)
+    ? listResponse.activities
+    : (Array.isArray(listResponse) ? listResponse : []);
   return activities.filter(activity =>
-    activity?.state !== 'ended' &&
-    activity?.state !== 'dismissed' &&
+    !isTerminalState(activity?.state) &&
     activity?.content?.button?.url === targetUrl &&
     /^LA[A-Za-z0-9_-]{2,}$/i.test(String(activity.activityId || ''))
   );
@@ -213,11 +220,21 @@ async function listDeviceActivities(deviceId, token, fetchFn = fetchWithTimeout)
   return res.json();
 }
 
-async function startNotifyActivity(deviceId, token, payload, fetchFn = fetchWithTimeout) {
+async function startNotifyActivity(deviceId, token, payload, useNewOrFetchFn = false, fetchFn = fetchWithTimeout) {
+  let useNew = false;
+  let actualFetch = fetchFn;
+  if (typeof useNewOrFetchFn === 'function') {
+    actualFetch = useNewOrFetchFn;
+  } else {
+    useNew = Boolean(useNewOrFetchFn);
+  }
+
   const url = new URL(`${NOTIFY_BASE_URL}/${encodeURIComponent(deviceId)}`);
   url.searchParams.set('token', token);
-  url.searchParams.set('new', '1');
-  const res = await fetchFn(url.toString(), {
+  if (useNew) {
+    url.searchParams.set('new', '1');
+  }
+  const res = await actualFetch(url.toString(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -226,6 +243,20 @@ async function startNotifyActivity(deviceId, token, payload, fetchFn = fetchWith
     },
     body: JSON.stringify(payload),
   });
+  if (res.status === 429) {
+    const data = await res.json().catch(() => ({}));
+    const retryAfterHeader = res.headers?.get ? res.headers.get('Retry-After') : null;
+    const retryAfterSeconds = Number(data.retryAfterSeconds || retryAfterHeader) || null;
+    const unansweredStarts = data.unansweredStarts ?? null;
+    const openingTheAppMayHelp = data.openingTheAppMayHelp ?? null;
+    const err = new Error(data.message || 'Notify start throttled');
+    err.status = 429;
+    err.throttled = true;
+    err.retryAfterSeconds = retryAfterSeconds;
+    err.unansweredStarts = unansweredStarts;
+    err.openingTheAppMayHelp = openingTheAppMayHelp;
+    throw err;
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`Notify start HTTP ${res.status}: ${text.slice(0, 200)}`);
@@ -388,9 +419,13 @@ async function executeDirectNotify(inputs, fetchFn = fetchWithTimeout) {
   ];
   const currentStatus = run.status === 'queued' ? 'Queued' : 'Running';
 
-  if (sortedMatches.length > 0) {
+  if (event === 'refresh') {
+    if (sortedMatches.length === 0) {
+      // Refresh MUST NEVER create or start a Live Activity.
+      return { ok: true, status: 'no_existing_activity' };
+    }
+
     const [canonical, ...duplicates] = sortedMatches;
-    // Self-healing: end duplicate activities deterministically
     for (const dup of duplicates) {
       try {
         await endNotifyActivity(dup.activityId, token, { progress: 100, status: 'Duplicate', keepFor: 0 }, fetchFn);
@@ -398,7 +433,14 @@ async function executeDirectNotify(inputs, fetchFn = fetchWithTimeout) {
         warning(`Failed to end duplicate activity ${dup.activityId}: ${err.message}`);
       }
     }
-    // Update canonical activity
+
+    const canonicalState = String(canonical.state || '').toLowerCase();
+    if (canonicalState === 'starting') {
+      // Activity is still being delivered or rendered; do not issue start or update
+      return { ok: true, status: 'existing_starting_activity', activityId: canonical.activityId };
+    }
+
+    // Active canonical activity: update it
     try {
       await updateNotifyActivity(canonical.activityId, token, {
         body: view.body,
@@ -409,47 +451,112 @@ async function executeDirectNotify(inputs, fetchFn = fetchWithTimeout) {
       }, fetchFn);
       return { ok: true, status: 'updated', activityId: canonical.activityId };
     } catch (err) {
+      if (err.throttled || err.status === 429) {
+        warning('Notify Live Activity update throttled; build continues.');
+        return { ok: true, status: 'notify_update_throttled', activityId: canonical.activityId };
+      }
       warning(`Notify update failed: ${err.message}; build continues.`);
       return { ok: false, status: 'error', reason: 'notify_update_error', error: err.message };
     }
-  } else {
-    // No matching activity -> Start new activity
-    let startRes;
+  }
+
+  // event === 'start'
+  if (sortedMatches.length > 0) {
+    const [canonical, ...duplicates] = sortedMatches;
+    for (const dup of duplicates) {
+      try {
+        await endNotifyActivity(dup.activityId, token, { progress: 100, status: 'Duplicate', keepFor: 0 }, fetchFn);
+      } catch (err) {
+        warning(`Failed to end duplicate activity ${dup.activityId}: ${err.message}`);
+      }
+    }
+
+    const canonicalState = String(canonical.state || '').toLowerCase();
+    if (canonicalState === 'starting') {
+      // Start is already in flight! Do not send another start.
+      return { ok: true, status: 'existing_starting_activity', activityId: canonical.activityId };
+    }
+
+    // Existing activity is active: adopt/update it
     try {
-      startRes = await startNotifyActivity(deviceId, token, {
-        title: repoTitle,
+      await updateNotifyActivity(canonical.activityId, token, {
         body: view.body,
-        symbol: 'hammer.fill',
-        tint: '#0A84FF',
         progress: view.progress,
         status: currentStatus,
         metrics,
         button: btn,
       }, fetchFn);
+      return { ok: true, status: 'updated', activityId: canonical.activityId };
     } catch (err) {
-      warning(`Notify start failed: ${err.message}; build continues.`);
-      return { ok: false, status: 'error', reason: 'notify_start_error', error: err.message };
-    }
-
-    const createdId = startRes?.activityId;
-
-    // Immediately re-query device activities to detect concurrency races and reconcile duplicates
-    try {
-      const recheckList = await listDeviceActivities(deviceId, token, fetchFn);
-      const recheckMatches = sortActivities(matchingActivities(recheckList, targetUrl));
-      if (recheckMatches.length > 1) {
-        const [winner, ...losers] = recheckMatches;
-        for (const loser of losers) {
-          try {
-            await endNotifyActivity(loser.activityId, token, { progress: 100, status: 'Duplicate', keepFor: 0 }, fetchFn);
-          } catch {}
-        }
-        return { ok: true, status: 'started_reconciled', activityId: winner.activityId };
+      if (err.throttled || err.status === 429) {
+        warning('Notify Live Activity update throttled; build continues.');
+        return { ok: true, status: 'notify_update_throttled', activityId: canonical.activityId };
       }
-    } catch {}
-
-    return { ok: true, status: 'started', activityId: createdId };
+      warning(`Notify update failed: ${err.message}; build continues.`);
+      return { ok: false, status: 'error', reason: 'notify_update_error', error: err.message };
+    }
   }
+
+  // ZERO matching non-terminal activities exist -> start ONE new activity.
+  // Check if other unrelated non-terminal activities exist on device:
+  const allDeviceActivities = Array.isArray(listRes?.activities)
+    ? listRes.activities
+    : (Array.isArray(listRes) ? listRes : []);
+  const otherNonTerminalActivities = allDeviceActivities.filter(a =>
+    !isTerminalState(a?.state) &&
+    a?.content?.button?.url !== targetUrl
+  );
+  const useNew = otherNonTerminalActivities.length > 0;
+
+  let startRes;
+  try {
+    startRes = await startNotifyActivity(deviceId, token, {
+      title: repoTitle,
+      body: view.body,
+      symbol: 'hammer.fill',
+      tint: '#0A84FF',
+      progress: view.progress,
+      status: currentStatus,
+      metrics,
+      button: btn,
+    }, useNew, fetchFn);
+  } catch (err) {
+    if (err.throttled || err.status === 429) {
+      const secs = err.retryAfterSeconds;
+      const msg = secs
+        ? `Notify Live Activity start throttled; retry allowed in approximately ${secs}s. Build continues.`
+        : 'Notify Live Activity start throttled. Build continues.';
+      warning(msg);
+      return {
+        ok: true,
+        status: 'notify_start_throttled',
+        retryAfterSeconds: err.retryAfterSeconds,
+        unansweredStarts: err.unansweredStarts,
+        openingTheAppMayHelp: err.openingTheAppMayHelp,
+      };
+    }
+    warning(`Notify start failed: ${err.message}; build continues.`);
+    return { ok: false, status: 'error', reason: 'notify_start_error', error: err.message };
+  }
+
+  const createdId = startRes?.activityId;
+
+  // Immediately re-query device activities to detect concurrency races and reconcile duplicates
+  try {
+    const recheckList = await listDeviceActivities(deviceId, token, fetchFn);
+    const recheckMatches = sortActivities(matchingActivities(recheckList, targetUrl));
+    if (recheckMatches.length > 1) {
+      const [winner, ...losers] = recheckMatches;
+      for (const loser of losers) {
+        try {
+          await endNotifyActivity(loser.activityId, token, { progress: 100, status: 'Duplicate', keepFor: 0 }, fetchFn);
+        } catch {}
+      }
+      return { ok: true, status: 'started_reconciled', activityId: winner.activityId, useNew };
+    }
+  } catch {}
+
+  return { ok: true, status: 'started', activityId: createdId, useNew };
 }
 
 function getEnvInputs(env = process.env) {
@@ -501,4 +608,9 @@ module.exports = {
   sortActivities,
   isInstrumentationStep,
   stepDisplayName,
+  startNotifyActivity,
+  updateNotifyActivity,
+  endNotifyActivity,
+  listDeviceActivities,
+  isTerminalState,
 };

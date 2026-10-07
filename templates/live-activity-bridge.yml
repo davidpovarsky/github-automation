@@ -6,7 +6,6 @@ on:
       - "*"
       - "!Live Activity Bridge"
     types:
-      - requested
       - in_progress
       - completed
 
