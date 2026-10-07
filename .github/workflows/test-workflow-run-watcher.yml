@@ -1,0 +1,29 @@
+name: Test Workflow-Run Watcher
+
+on:
+  workflow_run:
+    workflows:
+      - "Watcher Source Test"
+    types:
+      - in_progress
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  watch:
+    uses: davidpovarsky/github-automation/.github/workflows/monitor.yml@main
+    with:
+      title: "Watcher Test"
+      source_run_id: ${{ github.event.workflow_run.id }}
+      source_repository: ${{ github.repository }}
+      source_branch: ${{ github.event.workflow_run.head_branch }}
+      source_workflow: ${{ github.event.workflow_run.name }}
+      source_run_number: ${{ github.event.workflow_run.run_number }}
+      poll_seconds: 5
+      keep_for: 30
+      max_minutes: 20
+    secrets:
+      notify_device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+      notify_device_token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
