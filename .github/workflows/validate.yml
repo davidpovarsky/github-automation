@@ -1,0 +1,48 @@
+name: Validate action
+
+on:
+  push:
+    paths:
+      - action.yml
+      - index.js
+      - .github/workflows/validate.yml
+  pull_request:
+    paths:
+      - action.yml
+      - index.js
+      - .github/workflows/validate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    name: Syntax and metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check JavaScript syntax
+        run: node --check index.js
+
+      - name: Verify action metadata
+        shell: python
+        run: |
+          from pathlib import Path
+
+          text = Path("action.yml").read_text(encoding="utf-8")
+          required = [
+              "name: Notify Live Activity",
+              "using: node24",
+              "main: index.js",
+              "activity_id:",
+              "metrics_json:",
+              "fail_on_error:",
+          ]
+
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit(f"Missing required action.yml entries: {missing}")
+
+          print("action.yml basic validation passed")
