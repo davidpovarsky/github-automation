@@ -101,6 +101,59 @@ Content:
 - `state`
 - `response_json`
 
+
+## Central on/off control
+
+Every repository should call this action with:
+
+```yaml
+uses: davidpovarsky/github-automation@main
+```
+
+Because callers use `@main`, future runs always use the current central action and its `config.json`.
+
+The root `config.json` is the control panel:
+
+```json
+{
+  "enabled": true,
+  "repositories": {
+    "*": true
+  },
+  "branches": {
+    "*": {
+      "*": true
+    }
+  },
+  "endExistingWhenDisabled": true
+}
+```
+
+- Set `"enabled": false` to stop new Live Activities and updates everywhere.
+- Existing activities may still receive an `end` call so they close cleanly.
+- Disable one repository centrally:
+
+```json
+"repositories": {
+  "*": true,
+  "davidpovarsky/example-repo": false
+}
+```
+
+- Disable one branch centrally:
+
+```json
+"branches": {
+  "*": {"*": true},
+  "davidpovarsky/example-repo": {
+    "*": true,
+    "experimental-branch": false
+  }
+}
+```
+
+This means the individual repositories do not need to be edited when the global policy changes.
+
 ## Security
 
 Do not commit Notify! credentials. Store them as GitHub Actions secrets in each calling repository.
