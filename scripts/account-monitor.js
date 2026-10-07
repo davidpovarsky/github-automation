@@ -32,9 +32,10 @@ function runLink(run) {
 
 function runButton(run) {
   return JSON.stringify({
-    title: 'Open Run',
+    title: 'GitHub ↗',
     url: runLink(run),
     open: true,
+    method: 'GET',
   });
 }
 
@@ -176,8 +177,8 @@ function startActivity(run) {
     token: DEVICE_TOKEN,
     scope_repository: run.repository.full_name,
     scope_branch: run.head_branch || '',
-    title: repoName,
-    body: `${run.name} #${run.run_number}`,
+    title: `${repoName} · #${run.run_number}`,
+    body: run.name,
     symbol: 'hammer.fill',
     tint: '#0A84FF',
     progress: '0',
@@ -185,7 +186,6 @@ function startActivity(run) {
     metrics_json: JSON.stringify([
       { label: 'Branch', value: short(run.head_branch) },
       { label: 'Workflow', value: short(run.name) },
-      { label: 'Run', value: short(`#${run.run_number}`) },
     ]),
     button_json: runButton(run),
     fail_on_error: 'false',
@@ -234,7 +234,6 @@ function updateActivity(entry, run, jobs) {
       { label: 'Job', value: short(active?.name || 'Waiting') },
       { label: 'Step', value: short(step?.name || run.status) },
       { label: 'Done', value: `${completed}/${jobs.length}` },
-      { label: 'Run', value: short(`#${run.run_number}`) },
     ]),
     button_json: runButton(run),
     fail_on_error: 'false',
