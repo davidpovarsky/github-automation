@@ -1,0 +1,102 @@
+name: Central Live Activity Monitor
+
+on:
+  workflow_call:
+    inputs:
+      title:
+        description: Optional Live Activity title. Defaults to caller repository name.
+        required: false
+        type: string
+        default: ""
+      symbol:
+        description: SF Symbol used by Notify!
+        required: false
+        type: string
+        default: "hammer.fill"
+      tint:
+        description: Notify! tint color.
+        required: false
+        type: string
+        default: "#0A84FF"
+      poll_seconds:
+        description: Seconds between GitHub Actions status checks.
+        required: false
+        type: number
+        default: 15
+      keep_for:
+        description: Seconds to leave the final Live Activity visible.
+        required: false
+        type: number
+        default: 60
+      max_minutes:
+        description: Safety timeout for the monitor job.
+        required: false
+        type: number
+        default: 360
+    secrets:
+      notify_device_id:
+        required: true
+      notify_device_token:
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  monitor:
+    name: Live Activity monitor
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.max_minutes }}
+
+    steps:
+      - name: Checkout central automation
+        uses: actions/checkout@v4
+        with:
+          repository: davidpovarsky/github-automation
+          ref: main
+          path: .github-automation
+          persist-credentials: false
+
+      - name: Start Live Activity
+        id: notify
+        uses: davidpovarsky/github-automation@main
+        with:
+          action: start
+          device_id: ${{ secrets.notify_device_id }}
+          token: ${{ secrets.notify_device_token }}
+          title: ${{ inputs.title || github.event.repository.name }}
+          body: "Workflow #${{ github.run_number }}"
+          symbol: ${{ inputs.symbol }}
+          tint: ${{ inputs.tint }}
+          progress: "0"
+          status: "Starting"
+          metrics_json: |
+            [
+              {"label":"Branch","value":"${{ github.ref_name }}"},
+              {"label":"Workflow","value":"${{ github.workflow }}"},
+              {"label":"Run","value":"#${{ github.run_number }}"}
+            ]
+
+      - name: Follow workflow jobs
+        id: follow
+        if: steps.notify.outputs.activity_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTIFY_DEVICE_ID: ${{ secrets.notify_device_id }}
+          NOTIFY_DEVICE_TOKEN: ${{ secrets.notify_device_token }}
+          NOTIFY_ACTIVITY_ID: ${{ steps.notify.outputs.activity_id }}
+          POLL_SECONDS: ${{ inputs.poll_seconds }}
+        run: node .github-automation/scripts/monitor-run.js
+
+      - name: End Live Activity
+        if: always() && steps.notify.outputs.activity_id != ''
+        uses: davidpovarsky/github-automation@main
+        with:
+          action: end
+          device_id: ${{ secrets.notify_device_id }}
+          token: ${{ secrets.notify_device_token }}
+          activity_id: ${{ steps.notify.outputs.activity_id }}
+          progress: "100"
+          status: ${{ steps.follow.outputs.final_status || 'Finished' }}
+          keep_for: ${{ inputs.keep_for }}
