@@ -1,0 +1,96 @@
+# Example only — copy/adapt these steps inside a workflow in another repository.
+# Store NOTIFY_DEVICE_ID and NOTIFY_DEVICE_TOKEN as repository secrets.
+
+name: Example build with Notify
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Notify Live Activity
+        id: notify
+        uses: davidpovarsky/github-automation@main
+        with:
+          action: start
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          title: "${{ github.event.repository.name }}"
+          body: "Workflow #${{ github.run_number }}"
+          symbol: "hammer.fill"
+          tint: "#0A84FF"
+          steps: "4"
+          step: "0"
+          status: "Starting"
+          metrics_json: |
+            [
+              {"label":"Branch","value":"${{ github.ref_name }}"},
+              {"label":"Stage","value":"Start"},
+              {"label":"Run","value":"#${{ github.run_number }}"}
+            ]
+
+      - name: Build
+        run: |
+          echo "Replace with the real build command"
+
+      - name: Update — build complete
+        uses: davidpovarsky/github-automation@main
+        with:
+          action: update
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          activity_id: ${{ steps.notify.outputs.activity_id }}
+          step: "1"
+          status: "Build complete"
+          metrics_json: |
+            [
+              {"label":"Branch","value":"${{ github.ref_name }}"},
+              {"label":"Stage","value":"Build ✓"},
+              {"label":"Run","value":"#${{ github.run_number }}"}
+            ]
+
+      - name: Tests
+        run: |
+          echo "Replace with the real test command"
+
+      - name: Update — tests complete
+        uses: davidpovarsky/github-automation@main
+        with:
+          action: update
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          activity_id: ${{ steps.notify.outputs.activity_id }}
+          step: "2"
+          status: "Tests complete"
+
+      - name: Package artifact
+        run: |
+          echo "Replace with IPA/package/archive step"
+
+      - name: Update — packaging complete
+        uses: davidpovarsky/github-automation@main
+        with:
+          action: update
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          activity_id: ${{ steps.notify.outputs.activity_id }}
+          step: "3"
+          status: "Artifact ready"
+
+      - name: Finish Notify Live Activity
+        if: always()
+        uses: davidpovarsky/github-automation@main
+        with:
+          action: end
+          device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
+          token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          activity_id: ${{ steps.notify.outputs.activity_id }}
+          step: "4"
+          progress: "100"
+          status: "${{ job.status }}"
+          keep_for: "60"
