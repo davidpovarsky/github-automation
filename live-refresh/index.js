@@ -134,7 +134,8 @@ function statusFor(conclusion) {
 function matchingActivities(listResponse, targetUrl) {
   const activities = Array.isArray(listResponse?.activities) ? listResponse.activities : [];
   return activities.filter(activity =>
-    (activity?.state === 'active' || !activity?.state) &&
+    activity?.state !== 'ended' &&
+    activity?.state !== 'dismissed' &&
     activity?.content?.button?.url === targetUrl &&
     /^LA[A-Za-z0-9_-]{2,}$/i.test(String(activity.activityId || ''))
   );
