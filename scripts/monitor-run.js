@@ -4,11 +4,15 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const repo = process.env.GITHUB_REPOSITORY;
-const runId = process.env.GITHUB_RUN_ID;
-const branch = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || '';
-const workflow = process.env.GITHUB_WORKFLOW || '';
-const runNumber = process.env.GITHUB_RUN_NUMBER || '';
+const repo = process.env.SOURCE_REPOSITORY || process.env.GITHUB_REPOSITORY;
+const runId = (process.env.SOURCE_RUN_ID && process.env.SOURCE_RUN_ID !== '0')
+  ? process.env.SOURCE_RUN_ID
+  : process.env.GITHUB_RUN_ID;
+const branch = process.env.SOURCE_BRANCH || process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || '';
+const workflow = process.env.SOURCE_WORKFLOW || process.env.GITHUB_WORKFLOW || '';
+const runNumber = (process.env.SOURCE_RUN_NUMBER && process.env.SOURCE_RUN_NUMBER !== '0')
+  ? process.env.SOURCE_RUN_NUMBER
+  : (process.env.GITHUB_RUN_NUMBER || '');
 const ghToken = process.env.GH_TOKEN || '';
 const deviceId = process.env.NOTIFY_DEVICE_ID || '';
 const deviceToken = process.env.NOTIFY_DEVICE_TOKEN || '';
@@ -127,6 +131,8 @@ function notifyUpdate(state) {
     INPUT_DEVICE_ID: deviceId,
     INPUT_TOKEN: deviceToken,
     INPUT_ACTIVITY_ID: activityId,
+    INPUT_SCOPE_REPOSITORY: repo,
+    INPUT_SCOPE_BRANCH: branch,
     INPUT_TITLE: '',
     INPUT_BODY: state.active ? short(state.active.name, 64) : 'Waiting for jobs',
     INPUT_SYMBOL: '',
