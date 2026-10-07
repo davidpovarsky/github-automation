@@ -7,32 +7,19 @@ const ACTION = 'davidpovarsky/github-automation/live-refresh@main';
 const PREFIX = 'Live Activity ·';
 
 function indentOf(line) { return line.match(/^\s*/)[0].length; }
-function isStepItem(line) { return /^\s*-\s+name:\s*/.test(line); }
-function isInstrumentation(line) { return line.includes(ACTION) || line.includes(PREFIX); }
+function isListItem(line, indent) { return indentOf(line) === indent && /^\s*-\s+/.test(line); }
+function isInstrumentationStep(lines) { return lines.some(line => line.includes(ACTION) || line.includes(PREFIX)); }
 function renderRefresh(indent, conditionLine) {
   const pad = ' '.repeat(indent);
-  return [
-    `${pad}- name: Live Activity · refresh`,
-    conditionLine ? `${pad}  ${conditionLine.trim()}` : null,
-    `${pad}  uses: ${ACTION}`,
-    `${pad}  continue-on-error: true`,
-  ].filter(Boolean);
+  return [`${pad}- name: Live Activity · refresh`, conditionLine ? `${pad}  ${conditionLine.trim()}` : null, `${pad}  uses: ${ACTION}`, `${pad}  continue-on-error: true`].filter(Boolean);
 }
 function renderFinal(indent) {
   const pad = ' '.repeat(indent);
-  return [
-    `${pad}- name: Live Activity · final`,
-    `${pad}  if: always()`,
-    `${pad}  uses: ${ACTION}`,
-    `${pad}  continue-on-error: true`,
-    `${pad}  with:`,
-    `${pad}    event: final-hint`,
-  ];
+  return [`${pad}- name: Live Activity · final`, `${pad}  if: always()`, `${pad}  uses: ${ACTION}`, `${pad}  continue-on-error: true`, `${pad}  with:`, `${pad}    event: final-hint`];
 }
 
 function instrument(text) {
   const lines = text.split(/\r?\n/);
-  if (text.includes(ACTION)) return { text, modified: false, reason: 'already-instrumented' };
   const output = [];
   let modified = false;
   let jobs = 0;
@@ -43,40 +30,51 @@ function instrument(text) {
     const line = lines[i];
     if (!/^\s*steps:\s*$/.test(line)) { output.push(line); i += 1; continue; }
     const stepsIndent = indentOf(line);
-    const itemIndent = (() => {
-      for (let j = i + 1; j < lines.length; j += 1) if (isStepItem(lines[j])) return indentOf(lines[j]);
-      return stepsIndent + 2;
-    })();
     const block = [];
     let j = i + 1;
     for (; j < lines.length; j += 1) {
-      const candidate = lines[j];
-      if (candidate.trim() && indentOf(candidate) <= stepsIndent) break;
-      block.push(candidate);
+      if (lines[j].trim() && indentOf(lines[j]) <= stepsIndent) break;
+      block.push(lines[j]);
     }
-    const hasNormalStep = block.some(item => isStepItem(item) && !isInstrumentation(item));
-    output.push(line);
-    if (!hasNormalStep) { output.push(...block); i = j; continue; }
-    jobs += 1;
+    const firstItem = block.find(item => /^\s*-\s+/.test(item));
+    if (!firstItem) { output.push(line, ...block); i = j; continue; }
+    const itemIndent = indentOf(firstItem);
+    const items = [];
     for (let k = 0; k < block.length;) {
-      const current = block[k];
-      if (!isStepItem(current) || isInstrumentation(current)) { output.push(current); k += 1; continue; }
-      const stepIndent = indentOf(current);
+      if (!isListItem(block[k], itemIndent)) { k += 1; continue; }
       let end = k + 1;
-      while (end < block.length && !(isStepItem(block[end]) && indentOf(block[end]) === stepIndent)) end += 1;
-      const stepLines = block.slice(k, end);
-      const condition = stepLines.find(item => /^\s*if:\s*/.test(item));
-      output.push(...renderRefresh(stepIndent, condition));
-      output.push(...stepLines);
-      refreshes += 1;
-      modified = true;
+      while (end < block.length && !isListItem(block[end], itemIndent)) end += 1;
+      items.push({ start: k, end, lines: block.slice(k, end) });
       k = end;
     }
-    output.push(...renderFinal(itemIndent));
-    finals += 1;
+    const normalItems = items.filter(item => !isInstrumentationStep(item.lines));
+    if (!normalItems.length) { output.push(line, ...block); i = j; continue; }
+    jobs += 1;
+    output.push(line);
+    for (const item of items) {
+      if (isInstrumentationStep(item.lines)) {
+        output.push(...item.lines);
+        continue;
+      }
+      const previous = items.find(candidate => candidate.end === item.start);
+      const alreadyHasRefresh = previous && previous.lines.some(candidate => candidate.includes('Live Activity · refresh') || candidate.includes(ACTION));
+      if (!alreadyHasRefresh) {
+        const condition = item.lines.find(candidate => /^\s*if:\s*/.test(candidate));
+        output.push(...renderRefresh(itemIndent, condition));
+        refreshes += 1;
+        modified = true;
+      }
+      output.push(...item.lines);
+    }
+    const existingFinal = items.some(item => item.lines.some(candidate => candidate.includes('Live Activity · final')));
+    if (!existingFinal) {
+      output.push(...renderFinal(itemIndent));
+      finals += 1;
+      modified = true;
+    }
     i = j;
   }
-  return { text: output.join('\n'), modified, jobs, refreshes, finals, reason: modified ? undefined : 'no-normal-steps-found' };
+  return { text: output.join('\n'), modified, jobs, refreshes, finals, reason: modified ? undefined : 'already-complete-or-no-normal-steps' };
 }
 
 if (require.main === module) {

@@ -23,3 +23,9 @@ After deployment, set the Worker URL as the default endpoint in `live-refresh/ac
 `POST /v1/refresh` accepts only repository/run identifiers. The Worker verifies the repository and run through GitHub using `GH_MONITOR_TOKEN`; a Durable Object named `<repository>#<run_id>#<run_attempt>` serializes Notify start/update/end operations and schedules alarms only while an activity is active.
 
 The legacy account monitor remains enabled until the deployed endpoint and external canary have passed. This is intentional rollback protection.
+
+## Security and abuse model
+
+The refresh endpoint is intentionally secret-free. It accepts only repository/run identifiers, rejects repositories outside `davidpovarsky`, verifies the repository, run, and attempt through GitHub, and never accepts Notify credentials, activity IDs, display text, or arbitrary payloads from the caller. Each run is serialized by its Durable Object; duplicate bursts are debounced for approximately one second and active runs use only a short safety alarm. This limits quota waste while keeping normal step transitions responsive. GitHub and Notify credentials exist only as Worker secrets.
+
+Configuration fails closed: a fresh `config.json` is preferred, then a last-known-good value is used. If no valid configuration has ever been read, the Worker does not create or update activities; it can still end an existing activity when GitHub reports completion.

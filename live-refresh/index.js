@@ -17,7 +17,7 @@ async function main() {
   };
   if (!payload.repository || !payload.run_id) { warning('GitHub run identifiers are unavailable; build continues without notification.'); return; }
   try {
-    const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json', 'user-agent': 'davidpovarsky/github-live-activity-refresh' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(5000) });
+    const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json', 'user-agent': 'davidpovarsky/github-live-activity-refresh' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(1800) });
     if (!response.ok) warning(`Live Activity Worker returned HTTP ${response.status}; build continues.`);
   } catch (error) { warning(`Live Activity refresh failed: ${error.message}; build continues.`); }
 }

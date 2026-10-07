@@ -2,7 +2,7 @@
   "name": "github-automation",
   "private": true,
   "scripts": {
-    "test": "node --test test/*.test.js",
+    "test": "node --test test/*.test.js test/*.test.mjs",
     "check": "node --check index.js && node --check live-refresh/index.js && node --check scripts/account-monitor.js && node --check scripts/instrument-workflows.js"
   },
   "devDependencies": {
