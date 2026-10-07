@@ -26,6 +26,18 @@ function short(value, max = 16) {
   return s.length <= max ? s : s.slice(0, Math.max(1, max - 1)) + '…';
 }
 
+function runLink(run) {
+  return run.html_url || `https://github.com/${run.repository.full_name}/actions/runs/${run.id}`;
+}
+
+function runButton(run) {
+  return JSON.stringify({
+    title: 'Open Run',
+    url: runLink(run),
+    open: true,
+  });
+}
+
 async function github(token, endpoint, options = {}) {
   const response = await fetch(`https://api.github.com${endpoint}`, {
     ...options,
@@ -175,6 +187,7 @@ function startActivity(run) {
       { label: 'Workflow', value: short(run.name) },
       { label: 'Run', value: short(`#${run.run_number}`) },
     ]),
+    button_json: runButton(run),
     fail_on_error: 'false',
     new_activity: 'true',
   });
@@ -223,6 +236,7 @@ function updateActivity(entry, run, jobs) {
       { label: 'Done', value: `${completed}/${jobs.length}` },
       { label: 'Run', value: short(`#${run.run_number}`) },
     ]),
+    button_json: runButton(run),
     fail_on_error: 'false',
     new_activity: 'false',
   });
