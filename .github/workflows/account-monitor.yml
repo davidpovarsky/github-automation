@@ -1,6 +1,13 @@
 name: Central Account Actions Monitor
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/account-monitor.js"
+      - ".github/workflows/account-monitor.yml"
+      - "index.js"
   workflow_dispatch:
     inputs:
       runtime_minutes:
