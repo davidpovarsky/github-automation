@@ -1,0 +1,52 @@
+name: Central Account Actions Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      runtime_minutes:
+        description: Minutes to keep this monitor process alive before handing off to a fresh run.
+        required: false
+        default: "330"
+  schedule:
+    - cron: "23 */6 * * *"
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: central-account-actions-monitor
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    name: Monitor all repositories
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout central automation
+        uses: actions/checkout@v4
+
+      - name: Monitor account Actions
+        env:
+          GH_MONITOR_TOKEN: ${{ secrets.GH_MONITOR_TOKEN }}
+          CENTRAL_GITHUB_TOKEN: ${{ github.token }}
+          NOTIFY_DEVICE_ID: ${{ secrets.NOTIFY_DEVICE_ID }}
+          NOTIFY_DEVICE_TOKEN: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
+          ACCOUNT_OWNER: davidpovarsky
+          CENTRAL_REPOSITORY: davidpovarsky/github-automation
+          STATE_ISSUE_NUMBER: "1"
+          RUNTIME_MINUTES: ${{ inputs.runtime_minutes || '330' }}
+          FULL_SCAN_SECONDS: "120"
+          ACTIVE_POLL_SECONDS: "15"
+        run: node scripts/account-monitor.js
+
+      - name: Hand off to a fresh monitor run
+        if: ${{ success() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh workflow run account-monitor.yml --repo davidpovarsky/github-automation -f runtime_minutes=330
