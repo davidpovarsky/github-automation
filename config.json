@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "repositories": {
+    "*": true
+  },
+  "branches": {
+    "*": {
+      "*": true
+    }
+  },
+  "endExistingWhenDisabled": true
+}
