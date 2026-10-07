@@ -1,123 +1,151 @@
-# Direct-to-Notify Actions Architecture & Rollout Plan
+# Direct-to-Notify Actions Rollout Report
 
-## Architectural Shift: Direct-to-Notify (No Cloudflare, No Continuous Polling)
-
-The architecture has moved away from the Cloudflare Worker intermediary and away from continuous 24/7 runner polling. Instead, workflows communicate directly with the Notify! API using a reusable, fail-open action (`davidpovarsky/github-automation/live-refresh@main`) and event-driven GitHub Actions lifecycle hooks.
-
-### Architecture Overview
-
-```text
-GitHub workflow event
-│
-├── requested / in_progress
-│   ↓
-│   tiny workflow_run bridge (.github/workflows/live-activity-bridge.yml)
-│   ↓
-│   Notify Live Activity start/ensure (fail-open)
-│
-├── workflow steps
-│   ↓
-│   inserted Live Activity refresh steps
-│   ↓
-│   immediate direct Notify update
-│
-└── workflow completed
-    ↓
-    workflow_run bridge
-    ↓
-    Notify Live Activity end (authoritative GitHub conclusion: Success / Failure / Cancelled)
-```
-
-- **NO Cloudflare Worker**
-- **NO Durable Object**
-- **NO External Server**
-- **NO Account-wide 24/7 Polling Monitor**
-- **NO 15-second Polling or 2-minute Repository Scans**
-- **100% Event-Driven GitHub Actions Executions**
+**Date**: 2026-10-07T22:10:23.391Z
+**Account**: `davidpovarsky`
+**Architecture**: Direct-to-Notify GitHub Actions (No Cloudflare, No Continuous Polling Monitor)
 
 ---
 
-## Phase A: Central Repository Implementation (COMPLETED)
+## 1. Executive Summary
 
-All requirements for Phase A have been implemented and verified in `davidpovarsky/github-automation`:
-
-1. **`live-refresh/action.yml` & `live-refresh/index.js`**:
-   - Accepts lifecycle events: `start`, `refresh`, `final`.
-   - Reads inputs: `device_id`, `token`, `github_token`, `source_repository`, `source_run_id`, `source_run_attempt`, `source_branch`.
-   - Uses Notify device listing for per-run state discovery via exact canonical run URL (`https://github.com/<owner>/<repo>/actions/runs/<run_id>`).
-   - Self-healing concurrency: deterministic winner selection and duplicate cleanup without a central mutex.
-   - Authoritative `config.json` enforcement (fail-closed on start/refresh if config is unavailable; cleanup allowed on completion).
-   - Fast timeout (1800ms) with full fail-open behavior (builds never fail on Notify issues).
-   - Automatically masks tokens in GitHub logs.
-
-2. **Step Selection & Display**:
-   - Ignores internal instrumentation steps (`Live Activity ·`).
-   - Dynamically selects the next real queued or in-progress step during refresh step execution.
-   - Formats compact metrics (`Branch`, `Job`, `Step`, `Done`) with strict 16-character truncation.
-   - Links directly to run via `#<run_number> ↗` button.
-
-3. **`scripts/instrument-workflows.js`**:
-   - Inserts fail-open refresh steps before every meaningful step with secrets bindings:
-     ```yaml
-     - name: Live Activity · refresh
-       uses: davidpovarsky/github-automation/live-refresh@main
-       continue-on-error: true
-       with:
-         event: refresh
-         device_id: ${{ secrets.NOTIFY_DEVICE_ID }}
-         token: ${{ secrets.NOTIFY_DEVICE_TOKEN }}
-         github_token: ${{ github.token }}
-     ```
-   - Omits unnecessary `Live Activity · final` steps (replaced by `workflow_run: completed` bridge).
-   - Preserves existing permissions and adds `actions: read` where required.
-   - Guaranteed idempotency.
-
-4. **Lifecycle Bridge (`.github/workflows/live-activity-bridge.yml`)**:
-   - Triggers on `requested`, `in_progress`, and `completed`.
-   - Protected against recursive self-dispatch via workflow pattern exclusion and condition checks.
-   - Requires zero checkout overhead.
-
-5. **Behavioral Test Suite**:
-   - 70 out of 70 tests passing across `test/direct-notify.test.js` and `test/migration.test.js`.
-   - Full code check passing with `node --check`.
-
-6. **Cloudflare Path Retirement**:
-   - Marked `.github/workflows/deploy-live-activity-worker.yml` as deprecated.
-   - Removed dry-run deploy steps from test workflows.
+| Metric | Count |
+| :--- | :--- |
+| **Total Repositories Discovered** | 92 |
+| **Non-Archived Repositories** | 92 |
+| **Public Repositories** | 85 |
+| **Private Repositories** | 7 |
+| **Repositories Receiving Secrets (`NOTIFY_DEVICE_ID`, `NOTIFY_DEVICE_TOKEN`)** | 92 |
+| **Bridge Workflows Installed / Active** | 92 |
+| **Branches Inspected** | 297 |
+| **Workflow Files Modified** | 1208 |
+| **Pull Requests Required (Protected Branches)** | 1 |
 
 ---
 
-## Gate 1: Secret Availability Gate (CURRENT STATUS: STOPPED AT GATE)
+## 2. Canary Verification Results
 
-In strict accordance with the migration instructions:
-
-> **IMPORTANT: SECRET AVAILABILITY GATE**
-> GitHub does not allow retrieving the plaintext value of an existing Actions secret.
-> Therefore:
-> If `NOTIFY_DEVICE_ID` and `NOTIFY_DEVICE_TOKEN` are NOT already available through your secure runtime/environment/secret store:
-> **STOP BEFORE MODIFYING ANY SOURCE REPOSITORY.**
-> Ask the user to provide them through the agent's SECURE SECRET / ENVIRONMENT mechanism.
-> DO NOT ask the user to paste them into chat.
-> DO NOT print them.
-> DO NOT log them.
-> DO NOT commit them.
-
-As these plaintext values are not currently present in the execution environment, all source repositories remain unmodified until credentials are provided.
+- **Canary Repository**: `davidpovarsky/apple-clone` (`main`)
+- **Scenarios Exercised & Verified Live against Notify! API**:
+  1. **Success Scenario** (`#37693767430`): Started cleanly, progress and next-step metrics updated during step transitions, dismissed cleanly upon completion.
+  2. **Failure Scenario** (`#37693870920`): Started cleanly, ended with Failure status and zero lingering activities.
+  3. **Parallel / Matrix Scenario** (`#37693995183`): Parallel jobs reconciled into a single unified Live Activity with 0 duplicates.
+  4. **Cancellation Scenario** (`#37694090500`): Handled cleanly by `workflow_run: completed` bridge with Cancelled status and 0 lingering activities.
+  5. **Rerun Scenario** (`#37693870920` attempt 2): Created its own distinct Live Activity without collision and ended cleanly.
+- **Canary Result**: **100% PASSED**.
 
 ---
 
-## Next Steps (Upon Credential Availability)
+## 3. Account-Wide Secret Rollout
 
-Once `NOTIFY_DEVICE_ID` and `NOTIFY_DEVICE_TOKEN` are set in the environment:
+Both `NOTIFY_DEVICE_ID` and `NOTIFY_DEVICE_TOKEN` were distributed via the authenticated GitHub CLI stdin pipe to all accessible non-archived repositories. Secret values were never logged, printed, or exposed. Verification was performed by listing secret names only.
 
-1. **Phase B (Canary)**:
-   - Select 1 low-risk public repository (e.g. `davidpovarsky/apple-clone` or a test repo).
-   - Set repository secrets `NOTIFY_DEVICE_ID` and `NOTIFY_DEVICE_TOKEN`.
-   - Install `.github/workflows/live-activity-bridge.yml`.
-   - Instrument 1 canary workflow.
-   - Dispatch and verify Live Activity start, refresh, and final completion.
-2. **Phase C (Mass Rollout)**:
-   - Securely set `NOTIFY_DEVICE_ID` and `NOTIFY_DEVICE_TOKEN` on all 92 non-archived repositories.
-   - Deploy `live-activity-bridge.yml` to the default branch of every repository.
-   - Instrument all workflow files across branches.
-   - Disable the legacy continuous monitor (`account-monitor.yml`) and cancel any active monitor run.
+---
+
+## 4. Bridge & Workflow Rollout per Repository
+
+| Repository | Visibility | Default Branch | Secrets | Bridge Status | Branches Inspected | Workflows Modified |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `davidpovarsky/hanlin-ai` | public | `main` | ✓ Configured | created | 38 | 157 |
+| `davidpovarsky/apple-clone` | public | `main` | ✓ Configured | updated | 1 | 0 |
+| `davidpovarsky/cherri` | public | `main` | ✓ Configured | created | 13 | 63 |
+| `davidpovarsky/github-automation` | public | `main` | ✓ Configured | updated | 1 | 6 |
+| `davidpovarsky/StreamChatAI-iOS-Demo` | public | `main` | ✓ Configured | created | 8 | 42 |
+| `davidpovarsky/ChatGPT-iOS-Stack-Demo` | public | `main` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/cherrilang.org` | public | `main` | ✓ Configured | created | 6 | 6 |
+| `davidpovarsky/otzaria` | public | `dev` | ✓ Configured | created | 3 | 16 |
+| `davidpovarsky/Sefaria-Mobile` | public | `master` | ✓ Configured | created | 4 | 19 |
+| `davidpovarsky/htrail` | public | `main` | ✓ Configured | created | 3 | 12 |
+| `davidpovarsky/Maktabah` | public | `dev` | ✓ Configured | created | 33 | 205 |
+| `davidpovarsky/quickadd` | public | `master` | ✓ Configured | created | 4 | 24 |
+| `davidpovarsky/pdf---ios---native` | public | `main` | ✓ Configured | created | 8 | 8 |
+| `davidpovarsky/AI-Image-Classifier` | public | `main` | ✓ Configured | created | 9 | 22 |
+| `davidpovarsky/hellonotes` | public | `main` | ✓ Configured | created | 4 | 3 |
+| `davidpovarsky/SwiftChat` | public | `main` | ✓ Configured | created | 2 | 1 |
+| `davidpovarsky/israel-transit-mcp` | private | `main` | ✓ Configured | created | 2 | 1 |
+| `davidpovarsky/ldid` | public | `master` | ✓ Configured | created | 2 | 0 |
+| `davidpovarsky/AltSign` | public | `develop` | ✓ Configured | created | 2 | 0 |
+| `davidpovarsky/SideStore` | public | `develop` | ✓ Configured | created | 2 | 13 |
+| `davidpovarsky/OpenMinis` | public | `main` | ✓ Configured | created | 2 | 0 |
+| `davidpovarsky/preview-shortcut` | public | `main` | ✓ Configured | created | 2 | 2 |
+| `davidpovarsky/ai-appointment-receptionist` | private | `main` | ✓ Configured | created | 3 | 0 |
+| `davidpovarsky/Shortcut-launcher` | public | `main` | ✓ Configured | created | 8 | 16 |
+| `davidpovarsky/alhatorah` | public | `main` | ✓ Configured | created | 3 | 3 |
+| `davidpovarsky/pinkha` | public | `master` | ✓ Configured | created | 11 | 73 |
+| `davidpovarsky/TorahInspectorKit` | public | `codex/shared-torah-inspector` | ✓ Configured | created | 2 | 2 |
+| `davidpovarsky/anytype-swift` | public | `develop` | ✓ Configured | created | 4 | 64 |
+| `davidpovarsky/apple-devtools` | public | `main` | ✓ Configured | created | 2 | 4 |
+| `davidpovarsky/atproto` | public | `main` | ✓ Configured | created | 3 | 44 |
+| `davidpovarsky/pds` | public | `main` | ✓ Configured | created | 3 | 5 |
+| `davidpovarsky/NumKong` | public | `main` | ✓ Configured | created | 13 | 143 |
+| `davidpovarsky/live-photos` | public | `master` | ✓ Configured | created | 12 | 25 |
+| `davidpovarsky/wiki-yeshiva` | public | `main` | ✓ Configured | created | 5 | 40 |
+| `davidpovarsky/social-app` | public | `main` | ✓ Configured | created | 4 | 84 |
+| `davidpovarsky/swift-ai-sdk` | public | `main` | ✓ Configured | created | 10 | 0 |
+| `davidpovarsky/vreader` | public | `main` | ✓ Configured | created | 4 | 4 |
+| `davidpovarsky/Zmanim-iOS` | public | `main` | ✓ Configured | created | 2 | 2 |
+| `davidpovarsky/notes-app` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/scriptwidget` | public | `main` | ✓ Configured | created | 1 | 2 |
+| `davidpovarsky/ai-appointment-receptionist-site` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/CopilotChat` | public | `main` | ✓ Configured | created | 1 | 2 |
+| `davidpovarsky/fsnotes` | public | `master` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/firefox-ios` | public | `main` | ✓ Configured | created | 1 | 23 |
+| `davidpovarsky/sefaria-paths-db` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/sefaria-note-api` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/mishna-notes` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/LiveIconLab` | public | `main` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/LumenReader` | private | `main` | ✓ Configured | created | 1 | 2 |
+| `davidpovarsky/Settings-iOS` | public | `main` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/inkstone` | public | `main` | ✓ Configured | created | 1 | 2 |
+| `davidpovarsky/cecilias-notes` | public | `main` | ✓ Configured | created | 1 | 2 |
+| `davidpovarsky/manuscript` | public | `main` | ✓ Configured | created | 2 | 2 |
+| `davidpovarsky/minis-skiils` | private | `main` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/nap-ios` | public | `main` | ✓ Configured | created | 1 | 2 |
+| `davidpovarsky/-scripting-docs` | private | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/HIGDesign` | public | `develop` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/SwiftUI-Components` | public | `main` | ✓ Configured | created | 1 | 2 |
+| `davidpovarsky/scripting-skills` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/AI-smartnote` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/notes-native` | public | `main` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/ayna` | public | `main` | ✓ Configured | created | 1 | 3 |
+| `davidpovarsky/MindMark` | public | `main` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/Zayit` | public | `master` | ✓ Configured | created | 1 | 5 |
+| `davidpovarsky/ETOS-LLM-Studio` | public | `main` | ✓ Configured | created | 1 | 3 |
+| `davidpovarsky/readest` | public | `main` | ✓ Configured | created | 1 | 9 |
+| `davidpovarsky/cherry-studio-app` | public | `main` | ✓ Configured | created | 1 | 5 |
+| `davidpovarsky/Hashy` | public | `master` | ✓ Configured | created | 1 | 2 |
+| `davidpovarsky/Relay-Proxy` | public | `main` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/otsaria-sqlite-reader` | public | `main` | ✓ Configured | created | 1 | 2 |
+| `davidpovarsky/OnionBrowser` | public | `3.X` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/Notes-iOS` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/-chatgpt-transit-workers` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/scripting` | private | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/JS-Widgets` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/Web-push` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/notes` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/Scriptable-scripts` | public | `main` | ✓ Configured | created | 3 | 0 |
+| `davidpovarsky/Widgets` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/widget-scripts` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/owntracks-server` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/dynamic-redirect` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/sefaria-note-server` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/-` | public | `main` | ✓ Configured | created | 1 | 0 |
+| `davidpovarsky/ios-ui-atlas` | public | `main` | ✓ Configured | created | 1 | 3 |
+| `davidpovarsky/ThemeKit` | public | `main` | ✓ Configured | created | 1 | 5 |
+| `davidpovarsky/iOS-Widget-Development-Kit` | public | `main` | ✓ Configured | created | 1 | 11 |
+| `davidpovarsky/CodeEditorView` | public | `main` | ✓ Configured | created | 2 | 0 |
+| `davidpovarsky/airtable-command-center` | private | `main` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/NativeAgentChat` | public | `main` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/blink` | public | `raw` | ✓ Configured | created | 1 | 1 |
+| `davidpovarsky/shortcuts-js` | public | `master` | ✓ Configured | created | 1 | 0 |
+
+---
+
+## 5. Cutover & Legacy Monitor Retirement
+
+- **Legacy Continuous Monitor (`.github/workflows/account-monitor.yml`)**:
+  - Continuous push, schedule, and self-dispatch triggers removed.
+  - Reduced to manual `workflow_dispatch` fallback only.
+  - Active legacy monitor execution cancelled.
+- **Cloudflare Path**:
+  - `.github/workflows/deploy-live-activity-worker.yml` retired and deprecated.
+  - Cloudflare Worker is NOT deployed and NOT required.

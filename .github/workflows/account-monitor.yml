@@ -1,21 +1,12 @@
-name: Central Account Actions Monitor
+name: Central Account Actions Monitor (Retired / Manual Fallback Only)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "scripts/account-monitor.js"
-      - ".github/workflows/account-monitor.yml"
-      - "index.js"
   workflow_dispatch:
     inputs:
       runtime_minutes:
-        description: Minutes to keep this monitor process alive before handing off to a fresh run.
+        description: Minutes to keep this monitor process alive (manual fallback only).
         required: false
-        default: "330"
-  schedule:
-    - cron: "23 */6 * * *"
+        default: "60"
 
 permissions:
   actions: write
@@ -49,11 +40,3 @@ jobs:
           FULL_SCAN_SECONDS: "120"
           ACTIVE_POLL_SECONDS: "15"
         run: node scripts/account-monitor.js
-
-      - name: Hand off to a fresh monitor run
-        if: ${{ success() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh workflow run account-monitor.yml --repo davidpovarsky/github-automation -f runtime_minutes=330
