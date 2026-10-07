@@ -1,0 +1,30 @@
+name: Watcher Source Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/watcher-source-test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Source build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare
+        run: sleep 6
+      - name: Compile
+        run: sleep 6
+
+  package:
+    name: Source package
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Archive
+        run: sleep 6
+      - name: Upload
+        run: sleep 6
