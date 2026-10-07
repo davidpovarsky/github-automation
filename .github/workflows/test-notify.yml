@@ -30,7 +30,7 @@ jobs:
           status: "Starting"
           metrics_json: |
             [
-              {"label":"Repository","value":"github-automation"},
+              {"label":"Repository","value":"gh-automation"},
               {"label":"Stage","value":"Start"},
               {"label":"Run","value":"#${{ github.run_number }}"}
             ]
@@ -51,7 +51,7 @@ jobs:
           status: "Running"
           metrics_json: |
             [
-              {"label":"Repository","value":"github-automation"},
+              {"label":"Repository","value":"gh-automation"},
               {"label":"Stage","value":"Update"},
               {"label":"Run","value":"#${{ github.run_number }}"}
             ]
