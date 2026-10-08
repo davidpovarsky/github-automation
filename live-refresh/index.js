@@ -118,17 +118,27 @@ function activityView(run, jobs) {
   };
 }
 
-function statusFor(conclusion) {
+const FINAL_STATE_BY_CONCLUSION = Object.freeze({
+  success: { status: 'Success', tint: '#30D158' },
+  failure: { status: 'Failed', tint: '#FF453A' },
+  cancelled: { status: 'Cancelled', tint: '#FF9F0A' },
+  timed_out: { status: 'Timed Out', tint: '#FF453A' },
+  action_required: { status: 'Action Required', tint: '#FF9F0A' },
+  stale: { status: 'Stale', tint: '#FF453A' },
+  skipped: { status: 'Skipped', tint: '#8E8E93' },
+  neutral: { status: 'Neutral', tint: '#8E8E93' },
+});
+
+function finalStateFor(conclusion) {
   const val = String(conclusion || 'completed').toLowerCase();
-  if (val === 'success') return 'Success';
-  if (val === 'failure') return 'Failure';
-  if (val === 'cancelled') return 'Cancelled';
-  if (val === 'timed_out') return 'Timed Out';
-  if (val === 'skipped') return 'Skipped';
-  if (val === 'action_required') return 'Action Required';
-  if (val === 'stale') return 'Stale';
-  if (val === 'neutral') return 'Neutral';
-  return val.charAt(0).toUpperCase() + val.slice(1);
+  return FINAL_STATE_BY_CONCLUSION[val] || {
+    status: val.charAt(0).toUpperCase() + val.slice(1),
+    tint: '#8E8E93',
+  };
+}
+
+function statusFor(conclusion) {
+  return finalStateFor(conclusion).status;
 }
 
 const TERMINAL_STATES = new Set(['ended', 'dismissed', 'expired']);
@@ -394,8 +404,10 @@ async function executeDirectNotify(inputs, fetchFn = fetchWithTimeout) {
 
   // 4. Completed Run or Disabled Cleanup -> End ALL matching activities
   if (isCompleted || configDisabled) {
-    const endStatus = configDisabled ? 'Disabled' : statusFor(run.conclusion);
-    const endPayload = { progress: 100, status: endStatus, keepFor: 60 };
+    const finalState = configDisabled
+      ? { status: 'Disabled', tint: '#8E8E93' }
+      : finalStateFor(run.conclusion);
+    const endPayload = { progress: 100, status: finalState.status, tint: finalState.tint, keepFor: 60 };
     for (const match of sortedMatches) {
       try {
         await endNotifyActivity(match.activityId, token, endPayload, fetchFn);
@@ -403,7 +415,7 @@ async function executeDirectNotify(inputs, fetchFn = fetchWithTimeout) {
         warning(`Notify end failed for ${match.activityId}: ${err.message}`);
       }
     }
-    return { ok: true, status: 'ended', count: sortedMatches.length, conclusion: endStatus };
+    return { ok: true, status: 'ended', count: sortedMatches.length, conclusion: finalState.status };
   }
 
   // 5. Active Start or Refresh
@@ -446,6 +458,7 @@ async function executeDirectNotify(inputs, fetchFn = fetchWithTimeout) {
         body: view.body,
         progress: view.progress,
         status: currentStatus,
+        tint: '#0A84FF',
         metrics,
         button: btn,
       }, fetchFn);
@@ -483,6 +496,7 @@ async function executeDirectNotify(inputs, fetchFn = fetchWithTimeout) {
         body: view.body,
         progress: view.progress,
         status: currentStatus,
+        tint: '#0A84FF',
         metrics,
         button: btn,
       }, fetchFn);
@@ -603,6 +617,7 @@ module.exports = {
   runButton,
   visibleStep,
   activityView,
+  finalStateFor,
   statusFor,
   matchingActivities,
   sortActivities,

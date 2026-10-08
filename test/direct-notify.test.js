@@ -234,6 +234,9 @@ test('refresh existing activity updates canonical activity', async () => {
   assert.equal(res.ok, true);
   assert.equal(res.status, 'updated');
   assert.equal(res.activityId, 'LA_CANONICAL');
+  const updateCall = h.calls.find(c => c.method === 'POST' && c.url.includes('LA_CANONICAL'));
+  assert.equal(updateCall.body.status, 'Running');
+  assert.equal(updateCall.body.tint, '#0A84FF');
 });
 
 // 4. final success
@@ -255,11 +258,14 @@ test('final success ends matching activity with Success status', async () => {
   const delCall = h.calls.find(c => c.method === 'DELETE' && c.url.includes('LA_CANONICAL'));
   assert.ok(delCall);
   assert.equal(delCall.body.status, 'Success');
+  assert.equal(delCall.body.tint, '#30D158');
   assert.equal(delCall.body.progress, 100);
+  assert.equal(delCall.body.keepFor, 60);
+  assert.equal(h.calls.filter(c => c.method === 'POST' && !c.url.includes('/LA')).length, 0);
 });
 
 // 5. final failure
-test('final failure ends matching activity with Failure status', async () => {
+test('final failure ends matching activity with Failed status and red tint', async () => {
   const existing = {
     activityId: 'LA_FAIL',
     state: 'active',
@@ -272,9 +278,12 @@ test('final failure ends matching activity with Failure status', async () => {
   });
   const res = await executeDirectNotify({ ...h.defaultInputs, event: 'final' }, h.mockFetch);
   assert.equal(res.ok, true);
-  assert.equal(res.conclusion, 'Failure');
+  assert.equal(res.conclusion, 'Failed');
   const delCall = h.calls.find(c => c.method === 'DELETE' && c.url.includes('LA_FAIL'));
-  assert.equal(delCall.body.status, 'Failure');
+  assert.equal(delCall.body.status, 'Failed');
+  assert.equal(delCall.body.tint, '#FF453A');
+  assert.equal(delCall.body.progress, 100);
+  assert.equal(delCall.body.keepFor, 60);
 });
 
 // 6. final cancellation
@@ -294,6 +303,22 @@ test('final cancellation ends matching activity with Cancelled status', async ()
   assert.equal(res.conclusion, 'Cancelled');
   const delCall = h.calls.find(c => c.method === 'DELETE' && c.url.includes('LA_CANCEL'));
   assert.equal(delCall.body.status, 'Cancelled');
+  assert.equal(delCall.body.tint, '#FF9F0A');
+  assert.equal(delCall.body.progress, 100);
+  assert.equal(delCall.body.keepFor, 60);
+});
+
+// 6b. final timeout
+test('final timed_out uses failed red treatment', async () => {
+  const existing = {
+    activityId: 'LA_TIMEOUT',
+    state: 'active',
+    content: { button: { url: 'https://github.com/davidpovarsky/demo/actions/runs/42' } },
+  };
+  const h = createHarness({ activities: [existing], run: { status: 'completed', conclusion: 'timed_out' } });
+  await executeDirectNotify({ ...h.defaultInputs, event: 'final' }, h.mockFetch);
+  const delCall = h.calls.find(c => c.method === 'DELETE' && c.url.includes('LA_TIMEOUT'));
+  assert.deepEqual(delCall.body, { progress: 100, status: 'Timed Out', tint: '#FF453A', keepFor: 60 });
 });
 
 // 7. final ends every duplicate matching activity
